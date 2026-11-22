@@ -25,6 +25,11 @@ public:
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 
+    Book(const Book&) = delete;
+    Book& operator=(const Book&) = delete;
+    Book(Book&&) = default;
+    Book& operator=(Book&&) = default;
+
     explicit Book(TradeCallback on_trade = {});
 
     // Returns the id assigned to the incoming order. If the order crosses the

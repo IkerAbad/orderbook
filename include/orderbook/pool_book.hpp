@@ -24,6 +24,11 @@ public:
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 
+    PoolBook(const PoolBook&) = delete;
+    PoolBook& operator=(const PoolBook&) = delete;
+    PoolBook(PoolBook&&) = default;
+    PoolBook& operator=(PoolBook&&) = default;
+
     // max_orders is the number of orders that can rest at the same time. Adding
     // one more throws std::overflow_error.
     PoolBook(Price min_price, Price max_price, std::size_t max_orders,

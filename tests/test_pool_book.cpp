@@ -18,6 +18,8 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -596,6 +598,44 @@ TEST_CASE("parse_csv works on a string") {
 
     CHECK_THROWS_AS(ob::parse_csv(""), std::runtime_error);
     CHECK_THROWS_AS(ob::parse_csv("wrong\n"), std::runtime_error);
+}
+
+TEST_CASE("books are movable but not copyable") {
+    static_assert(!std::is_copy_constructible_v<ob::Book>);
+    static_assert(!std::is_copy_assignable_v<ob::Book>);
+    static_assert(std::is_move_constructible_v<ob::Book>);
+    static_assert(std::is_move_assignable_v<ob::Book>);
+
+    static_assert(!std::is_copy_constructible_v<ob::ArrayBook>);
+    static_assert(!std::is_copy_assignable_v<ob::ArrayBook>);
+    static_assert(std::is_move_constructible_v<ob::ArrayBook>);
+    static_assert(std::is_move_assignable_v<ob::ArrayBook>);
+
+    static_assert(!std::is_copy_constructible_v<ob::PoolBook>);
+    static_assert(!std::is_copy_assignable_v<ob::PoolBook>);
+    static_assert(std::is_move_constructible_v<ob::PoolBook>);
+    static_assert(std::is_move_assignable_v<ob::PoolBook>);
+
+    ob::Book map_book;
+    map_book.add_limit(ob::Side::Buy, 100, 5);
+    ob::Book map_moved = std::move(map_book);
+    CHECK(map_moved.quantity_at(ob::Side::Buy, 100) == 5);
+    CHECK(map_moved.cancel(1));
+    CHECK(map_moved.order_count() == 0);
+
+    ob::ArrayBook array_book(100, 200);
+    array_book.add_limit(ob::Side::Buy, 150, 5);
+    ob::ArrayBook array_moved = std::move(array_book);
+    CHECK(array_moved.quantity_at(ob::Side::Buy, 150) == 5);
+    CHECK(array_moved.cancel(1));
+    CHECK(array_moved.order_count() == 0);
+
+    ob::PoolBook pool_book(100, 200, 8);
+    pool_book.add_limit(ob::Side::Buy, 150, 5);
+    ob::PoolBook pool_moved = std::move(pool_book);
+    CHECK(pool_moved.quantity_at(ob::Side::Buy, 150) == 5);
+    CHECK(pool_moved.cancel(1));
+    CHECK(pool_moved.order_count() == 0);
 }
 
 TEST_CASE("the books and the reference model agree on random modifies") {

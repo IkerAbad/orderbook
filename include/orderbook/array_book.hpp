@@ -21,6 +21,11 @@ public:
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 
+    ArrayBook(const ArrayBook&) = delete;
+    ArrayBook& operator=(const ArrayBook&) = delete;
+    ArrayBook(ArrayBook&&) = default;
+    ArrayBook& operator=(ArrayBook&&) = default;
+
     ArrayBook(Price min_price, Price max_price, TradeCallback on_trade = {});
 
     OrderId add_limit(Side side, Price price, Quantity quantity);
