@@ -110,6 +110,29 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
 cmake --build build
 ```
 
+## Presets
+
+`CMakePresets.json` defines the common configurations:
+
+| Preset | Configuration |
+|---|---|
+| `release` | Release, warnings as errors |
+| `debug` | Debug |
+| `clang` | Release with `clang++` |
+| `asan` | Debug with AddressSanitizer |
+| `ubsan` | Debug with UndefinedBehaviorSanitizer |
+| `coverage` | Debug with gcov instrumentation |
+| `fuzz` | Clang libFuzzer targets, tests off |
+
+```
+cmake --preset release
+cmake --build --preset release
+ctest --preset release
+```
+
+The sanitizer presets need the matching runtime installed. The `fuzz` preset
+also needs Clang.
+
 ## Use
 
 ```
@@ -218,32 +241,56 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-40 cases. The original 19 stay unchanged and cover priority rules, partial
+46 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 21 new cases cover the pool: slot reuse, a middle cancel that must not break
-the intrusive list, a full pool, invalid ladders, capacities and a span that
-overflows `Price`, a level total that overflows `Quantity`, depth, modify with
-an invalid price that must keep the original order, and a counter that replaces
+The 27 new cases cover the pool and the edges around it: slot reuse, a middle
+cancel that must not break the intrusive list, a full pool, invalid ladders and
+capacities, spans that overflow `Price`, level totals that overflow `Quantity`,
+depth, empty books, zero-depth queries, modify crossing the spread, modify fully
+executing, a crossing order that frees pool slots, and a counter that replaces
 global `operator new` and asserts that 50 rounds of adding, matching, modifying
 and cancelling do not allocate. They also check that every limit and market
 event consumes one id, so the cancels in a generated trace reference the order
-the book actually assigned. A differential test runs 20,000 events through
-`Book`, `ArrayBook` and `PoolBook` and compares the best prices, live orders,
-level counts, every trade and the executed volume. A second differential test
-runs 5,000 random operations with modifies through the three books and compares
-the depth, the best prices, the return values and every trade. The CSV reader
-round-trips a generated trace and rejects a bad header, a bad op, a bad side, a
-non-numeric field, a wrong field count and an empty file, and it accepts CRLF
-line endings. Running `./build/orderbook_pool_tests` reports the 21 new cases.
-Four CLI checks reject zero runs, zero frames, a missing option value and an
-unknown option with a message instead of a crash.
+the book actually assigned, and that `parse_csv` works without a file. The CSV
+reader round-trips a generated trace and rejects a bad header, a bad op, a bad
+side, a non-numeric field, a wrong field count and an empty file, and it accepts
+CRLF line endings. Running `./build/orderbook_pool_tests` reports the 27 new
+cases.
+
+Both differential tests also compare against an independent reference model that
+uses a map of vectors and computes totals on demand. The first runs 20,000
+generated events, the second runs 5,000 random operations with modifies. They
+compare best prices, live orders, level counts, depth, every trade and the
+executed volume. Four CLI checks reject zero runs, zero frames, a missing option
+value and an unknown option with a message instead of a crash.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
-and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. Warnings
-are errors in every job.
+and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
+Clang also build with `-Wconversion` and `-Wsign-conversion`. Warnings are errors
+in every compiler job.
+
+## Fuzzing
+
+Two libFuzzer targets are built when `ORDERBOOK_BUILD_FUZZERS=ON` is passed to
+Clang:
+
+- `fuzz_parse_csv` feeds arbitrary bytes to `parse_csv`, which must reject
+  malformed input with an exception instead of reading out of bounds.
+- `fuzz_book` interprets bytes as limit, market, cancel and modify operations
+  and aborts if `Book`, `ArrayBook` and `PoolBook` disagree on state or trades.
+
+```
+cmake --preset fuzz
+cmake --build --preset fuzz
+./build/fuzz/fuzz_parse_csv -max_total_time=60 fuzz/corpus_parse
+./build/fuzz/fuzz_book -max_total_time=60 fuzz/corpus_book
+```
+
+The CI job runs both for 60 seconds with AddressSanitizer and
+UndefinedBehaviorSanitizer.
 
 ## Español
 
@@ -266,7 +313,9 @@ Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrid
 de niveles por parte de las órdenes a mercado, la semántica de `cancel` y
 `modify`, el rango del array, el pool lleno, la reutilización de huecos, la
 ausencia de reservas en régimen, el parser CSV y una comparación diferencial
-entre las tres implementaciones con la misma carga.
+entre las tres implementaciones y un modelo de referencia independiente. El
+parser y el motor se someten además a libFuzzer con AddressSanitizer y
+UndefinedBehaviorSanitizer.
 
 ## License
 
