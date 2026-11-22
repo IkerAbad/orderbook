@@ -57,9 +57,11 @@ $ ./build/orderbook generate --events 1000000 --seed 42 --out trace.csv
 wrote 1000000 events to trace.csv (650012 limit, 199987 cancel, 150001 market)
 ```
 
-The generator draws 65 % limit orders, 20 % cancels and 15 % market orders. A
-cancel is only emitted when a live order exists, otherwise the event becomes a
-market order, which explains the small drift from the exact percentages.
+The generator draws 65 % limit orders, 20 % cancels and 15 % market orders. It
+tracks the ids it has added and cancelled, not the ones the book has filled, so
+some cancel events reference orders that already executed and the book rejects
+them. The rare event where the generator has no id left becomes a market order,
+which explains the small drift from the exact percentages.
 
 ### Where the time goes
 
@@ -194,19 +196,20 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-32 cases. The original 19 stay unchanged and cover priority rules, partial
+33 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 13 new cases cover the pool: slot reuse, a middle cancel that must not break
-the intrusive list, a full pool, invalid ladders and capacities, depth, modify
-with an invalid price that must keep the original order, and a counter that
-replaces global `operator new` and asserts that 50 rounds of adding, matching,
-modifying and cancelling do not allocate. A differential test runs 20,000
-events through `Book`, `ArrayBook` and `PoolBook` and compares the best prices,
-live orders, level counts, every trade and the executed volume. Running
-`./build/orderbook_pool_tests` reports the 13 new cases.
+The 14 new cases cover the pool: slot reuse, a middle cancel that must not break
+the intrusive list, a full pool, invalid ladders, capacities and a span that
+overflows `Price`, depth, modify with an invalid price that must keep the
+original order, and a counter that replaces global `operator new` and asserts
+that 50 rounds of adding, matching, modifying and cancelling do not allocate. A
+differential test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook`
+and compares the best prices, live orders, level counts, every trade and the
+executed volume. Running `./build/orderbook_pool_tests` reports the 14 new
+cases.
 
 CI runs the tests on Linux and Windows, with GCC and MSVC.
 

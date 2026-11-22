@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <new>
 #include <stdexcept>
 #include <vector>
@@ -167,6 +168,22 @@ TEST_CASE("pool book validates its ladder and its capacity") {
     CHECK_THROWS_AS(book.add_limit(ob::Side::Buy, 99, 1), std::out_of_range);
     CHECK_THROWS_AS(book.add_limit(ob::Side::Sell, 201, 1), std::out_of_range);
     CHECK(book.order_count() == 0);
+}
+
+TEST_CASE("books reject ladders whose span overflows a Price") {
+    constexpr ob::Price lo = std::numeric_limits<ob::Price>::min();
+    constexpr ob::Price hi = std::numeric_limits<ob::Price>::max();
+
+    CHECK_THROWS_AS(ob::ArrayBook(lo, hi), std::invalid_argument);
+    CHECK_THROWS_AS(ob::PoolBook(lo, hi, 4), std::invalid_argument);
+
+    ob::ArrayBook array_top(hi - 1, hi);
+    array_top.add_limit(ob::Side::Buy, hi, 1);
+    CHECK(array_top.best_bid() == hi);
+
+    ob::PoolBook pool_top(hi - 1, hi, 4);
+    pool_top.add_limit(ob::Side::Buy, hi, 1);
+    CHECK(pool_top.best_bid() == hi);
 }
 
 TEST_CASE("pool book keeps the best price after a cancel") {

@@ -1,6 +1,7 @@
 #include "orderbook/pool_book.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
@@ -12,11 +13,12 @@ std::size_t ladder_size(Price min_price, Price max_price) {
         throw std::invalid_argument("max_price is below min_price");
     }
     constexpr std::size_t kMaxLevels = 50'000'000;
-    const auto size = static_cast<std::size_t>(max_price - min_price) + 1;
-    if (size > kMaxLevels) {
+    const auto span = static_cast<std::uint64_t>(max_price) -
+                      static_cast<std::uint64_t>(min_price);
+    if (span >= kMaxLevels) {
         throw std::invalid_argument("price ladder is too large");
     }
-    return size;
+    return static_cast<std::size_t>(span) + 1;
 }
 
 std::size_t mix(OrderId id) {
