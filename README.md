@@ -157,7 +157,8 @@ ctest --preset release
 ```
 
 The sanitizer presets need the matching runtime installed. The `fuzz` preset
-also needs Clang.
+also needs Clang. Debug builds define `_GLIBCXX_ASSERTIONS`, so libstdc++ checks
+container bounds.
 
 The `coverage` preset writes gcov data. With `gcovr` installed:
 

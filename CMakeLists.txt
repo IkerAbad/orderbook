@@ -24,6 +24,10 @@ if(MINGW)
   add_link_options(-static-libgcc -static-libstdc++)
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_definitions(_GLIBCXX_ASSERTIONS)
+endif()
+
 add_library(orderbook_core STATIC
   src/array_book.cpp
   src/book.cpp
