@@ -35,3 +35,21 @@ jobs:
           "$exe" bench --events 100000 --seed 1 --runs 1 --impl all
           "$exe" depth --events 20000 --seed 1 --frames 5 --out depth.csv
           test -s depth.csv
+
+  sanitizers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
