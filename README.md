@@ -138,6 +138,17 @@ ctest --preset release
 The sanitizer presets need the matching runtime installed. The `fuzz` preset
 also needs Clang.
 
+The `coverage` preset writes gcov data. With `gcovr` installed:
+
+```
+cmake --preset coverage
+cmake --build --preset coverage
+ctest --preset coverage
+gcovr -r . build/coverage --filter "src/" --exclude "src/main.cpp" --fail-under-line 90 --txt
+```
+
+CI fails if line coverage of the library sources drops below 90 %.
+
 ## Use
 
 ```
@@ -280,7 +291,8 @@ header must stand on its own.
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
 Clang also build with `-Wconversion` and `-Wsign-conversion`. Warnings are errors
-in every compiler job.
+in every compiler job. A separate job checks that line coverage of the library
+sources stays at or above 90 %.
 
 ## Fuzzing
 
