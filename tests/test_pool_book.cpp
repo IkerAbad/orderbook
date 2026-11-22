@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <limits>
 #include <new>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -318,6 +319,103 @@ TEST_CASE("generator ids follow every order that takes one") {
         }
     }
     CHECK(cancels > 0);
+}
+
+TEST_CASE("the three books agree on random modifies") {
+    constexpr ob::Price lo = 1000;
+    constexpr ob::Price hi = 2000;
+    constexpr std::size_t capacity = 8192;
+
+    std::vector<ob::Trade> map_trades;
+    std::vector<ob::Trade> array_trades;
+    std::vector<ob::Trade> pool_trades;
+
+    ob::Book map_book([&](const ob::Trade& t) { map_trades.push_back(t); });
+    ob::ArrayBook array_book(lo, hi,
+                             [&](const ob::Trade& t) { array_trades.push_back(t); });
+    ob::PoolBook pool_book(lo, hi, capacity,
+                           [&](const ob::Trade& t) { pool_trades.push_back(t); });
+
+    std::mt19937_64 rng(99);
+    std::uniform_int_distribution<int> side_pick(0, 1);
+    std::uniform_int_distribution<ob::Price> price_pick(lo, hi);
+    std::uniform_int_distribution<ob::Quantity> size_pick(1, 20);
+    std::uniform_int_distribution<ob::Quantity> modify_size_pick(0, 20);
+    std::uniform_int_distribution<int> op_pick(0, 9);
+
+    std::vector<ob::OrderId> ids;
+
+    for (int step = 0; step < 5'000; ++step) {
+        const int op = op_pick(rng);
+
+        if (op < 5 || ids.empty()) {
+            const ob::Side side = side_pick(rng) == 0 ? ob::Side::Buy : ob::Side::Sell;
+            const ob::Price price = price_pick(rng);
+            const ob::Quantity quantity = size_pick(rng);
+
+            ids.push_back(map_book.add_limit(side, price, quantity));
+            array_book.add_limit(side, price, quantity);
+            pool_book.add_limit(side, price, quantity);
+        } else if (op < 7) {
+            const ob::Side side = side_pick(rng) == 0 ? ob::Side::Buy : ob::Side::Sell;
+            const ob::Quantity quantity = size_pick(rng);
+
+            const ob::Quantity map_filled = map_book.add_market(side, quantity);
+            const ob::Quantity array_filled = array_book.add_market(side, quantity);
+            const ob::Quantity pool_filled = pool_book.add_market(side, quantity);
+            CHECK(map_filled == array_filled);
+            CHECK(map_filled == pool_filled);
+        } else if (op < 9) {
+            std::uniform_int_distribution<std::size_t> pick(0, ids.size() - 1);
+            const ob::OrderId id = ids[pick(rng)];
+
+            const bool map_cancelled = map_book.cancel(id);
+            const bool array_cancelled = array_book.cancel(id);
+            const bool pool_cancelled = pool_book.cancel(id);
+            CHECK(map_cancelled == array_cancelled);
+            CHECK(map_cancelled == pool_cancelled);
+        } else {
+            std::uniform_int_distribution<std::size_t> pick(0, ids.size() - 1);
+            const ob::OrderId id = ids[pick(rng)];
+            const ob::Price price = price_pick(rng);
+            const ob::Quantity quantity = modify_size_pick(rng);
+
+            const bool map_modified = map_book.modify(id, price, quantity);
+            const bool array_modified = array_book.modify(id, price, quantity);
+            const bool pool_modified = pool_book.modify(id, price, quantity);
+            CHECK(map_modified == array_modified);
+            CHECK(map_modified == pool_modified);
+        }
+
+        if (step % 100 == 0) {
+            CHECK(map_book.order_count() == array_book.order_count());
+            CHECK(map_book.order_count() == pool_book.order_count());
+            CHECK(map_book.best_bid() == array_book.best_bid());
+            CHECK(map_book.best_bid() == pool_book.best_bid());
+            CHECK(map_book.best_ask() == array_book.best_ask());
+            CHECK(map_book.best_ask() == pool_book.best_ask());
+            CHECK(map_book.depth(ob::Side::Buy, 8) == array_book.depth(ob::Side::Buy, 8));
+            CHECK(map_book.depth(ob::Side::Buy, 8) == pool_book.depth(ob::Side::Buy, 8));
+            CHECK(map_book.depth(ob::Side::Sell, 8) ==
+                  array_book.depth(ob::Side::Sell, 8));
+            CHECK(map_book.depth(ob::Side::Sell, 8) ==
+                  pool_book.depth(ob::Side::Sell, 8));
+        }
+    }
+
+    REQUIRE(map_trades.size() == array_trades.size());
+    REQUIRE(map_trades.size() == pool_trades.size());
+    for (std::size_t i = 0; i < map_trades.size(); ++i) {
+        CHECK(map_trades[i].taker == array_trades[i].taker);
+        CHECK(map_trades[i].maker == array_trades[i].maker);
+        CHECK(map_trades[i].price == array_trades[i].price);
+        CHECK(map_trades[i].quantity == array_trades[i].quantity);
+        CHECK(map_trades[i].taker == pool_trades[i].taker);
+        CHECK(map_trades[i].maker == pool_trades[i].maker);
+        CHECK(map_trades[i].price == pool_trades[i].price);
+        CHECK(map_trades[i].quantity == pool_trades[i].quantity);
+    }
+    CHECK(map_book.order_count() == pool_book.order_count());
 }
 
 TEST_CASE("the three books agree on a random workload") {
