@@ -138,7 +138,7 @@ install(TARGETS orderbook
 install(DIRECTORY include/orderbook
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(FILES LICENSE README.md
+install(FILES LICENSE README.md CHANGELOG.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
 install(EXPORT orderbookTargets

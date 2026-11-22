@@ -242,6 +242,7 @@ subdirectory or packaged.
 ## Project layout
 
 ```
+CHANGELOG.md        release notes
 include/orderbook/  public headers
 src/                library sources and the CLI
 tests/              doctest suites, reference model and header self-checks
