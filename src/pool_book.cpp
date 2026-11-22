@@ -405,21 +405,21 @@ bool PoolBook::modify(OrderId id, Price new_price, Quantity new_quantity) {
     return true;
 }
 
-std::optional<Price> PoolBook::best_bid() const {
+std::optional<Price> PoolBook::best_bid() const noexcept {
     if (!has_bid_) {
         return std::nullopt;
     }
     return min_price_ + static_cast<Price>(best_bid_);
 }
 
-std::optional<Price> PoolBook::best_ask() const {
+std::optional<Price> PoolBook::best_ask() const noexcept {
     if (!has_ask_) {
         return std::nullopt;
     }
     return min_price_ + static_cast<Price>(best_ask_);
 }
 
-Quantity PoolBook::quantity_at(Side side, Price price) const {
+Quantity PoolBook::quantity_at(Side side, Price price) const noexcept {
     if (!in_range(price)) {
         return 0;
     }
@@ -454,14 +454,14 @@ PoolBook::Depth PoolBook::depth(Side side, std::size_t levels) const {
     return out;
 }
 
-std::size_t PoolBook::level_count(Side side) const {
+std::size_t PoolBook::level_count(Side side) const noexcept {
     const auto& levels = side == Side::Buy ? bids_ : asks_;
     return static_cast<std::size_t>(std::count_if(
         levels.begin(), levels.end(),
         [](const Level& level) { return level.head != kNone; }));
 }
 
-std::size_t PoolBook::memory_bytes() const {
+std::size_t PoolBook::memory_bytes() const noexcept {
     return orders_.capacity() * sizeof(Order) +
            next_.capacity() * sizeof(std::uint32_t) +
            prev_.capacity() * sizeof(std::uint32_t) +

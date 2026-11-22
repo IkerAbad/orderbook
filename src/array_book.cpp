@@ -272,21 +272,21 @@ bool ArrayBook::modify(OrderId id, Price new_price, Quantity new_quantity) {
     return true;
 }
 
-std::optional<Price> ArrayBook::best_bid() const {
+std::optional<Price> ArrayBook::best_bid() const noexcept {
     if (!has_bid_) {
         return std::nullopt;
     }
     return min_price_ + static_cast<Price>(best_bid_);
 }
 
-std::optional<Price> ArrayBook::best_ask() const {
+std::optional<Price> ArrayBook::best_ask() const noexcept {
     if (!has_ask_) {
         return std::nullopt;
     }
     return min_price_ + static_cast<Price>(best_ask_);
 }
 
-Quantity ArrayBook::quantity_at(Side side, Price price) const {
+Quantity ArrayBook::quantity_at(Side side, Price price) const noexcept {
     if (!in_range(price)) {
         return 0;
     }
@@ -321,7 +321,7 @@ ArrayBook::Depth ArrayBook::depth(Side side, std::size_t levels) const {
     return out;
 }
 
-std::size_t ArrayBook::level_count(Side side) const {
+std::size_t ArrayBook::level_count(Side side) const noexcept {
     const auto& levels = side == Side::Buy ? bids_ : asks_;
     return static_cast<std::size_t>(std::count_if(
         levels.begin(), levels.end(),

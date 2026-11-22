@@ -39,16 +39,16 @@ public:
     bool cancel(OrderId id);
     bool modify(OrderId id, Price new_price, Quantity new_quantity);
 
-    [[nodiscard]] std::optional<Price> best_bid() const;
-    [[nodiscard]] std::optional<Price> best_ask() const;
-    [[nodiscard]] Quantity quantity_at(Side side, Price price) const;
+    [[nodiscard]] std::optional<Price> best_bid() const noexcept;
+    [[nodiscard]] std::optional<Price> best_ask() const noexcept;
+    [[nodiscard]] Quantity quantity_at(Side side, Price price) const noexcept;
     [[nodiscard]] Depth depth(Side side, std::size_t levels) const;
-    [[nodiscard]] std::size_t order_count() const { return live_; }
-    [[nodiscard]] std::size_t level_count(Side side) const;
-    [[nodiscard]] std::size_t capacity() const { return orders_.size(); }
+    [[nodiscard]] std::size_t order_count() const noexcept { return live_; }
+    [[nodiscard]] std::size_t level_count(Side side) const noexcept;
+    [[nodiscard]] std::size_t capacity() const noexcept { return orders_.size(); }
 
     // Bytes reserved by the vectors, excluding their object overhead.
-    [[nodiscard]] std::size_t memory_bytes() const;
+    [[nodiscard]] std::size_t memory_bytes() const noexcept;
 
 private:
     static constexpr std::uint32_t kNone = 0xFFFF'FFFFu;

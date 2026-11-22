@@ -204,21 +204,21 @@ bool Book::modify(OrderId id, Price new_price, Quantity new_quantity) {
     return true;
 }
 
-std::optional<Price> Book::best_bid() const {
+std::optional<Price> Book::best_bid() const noexcept {
     if (bids_.empty()) {
         return std::nullopt;
     }
     return bids_.begin()->first;
 }
 
-std::optional<Price> Book::best_ask() const {
+std::optional<Price> Book::best_ask() const noexcept {
     if (asks_.empty()) {
         return std::nullopt;
     }
     return asks_.begin()->first;
 }
 
-Quantity Book::quantity_at(Side side, Price price) const {
+Quantity Book::quantity_at(Side side, Price price) const noexcept {
     if (side == Side::Buy) {
         const auto it = bids_.find(price);
         return it == bids_.end() ? 0 : it->second.total;
@@ -244,7 +244,7 @@ Book::Depth Book::depth(Side side, std::size_t levels) const {
     return out;
 }
 
-std::size_t Book::level_count(Side side) const {
+std::size_t Book::level_count(Side side) const noexcept {
     return side == Side::Buy ? bids_.size() : asks_.size();
 }
 

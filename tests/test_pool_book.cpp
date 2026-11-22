@@ -624,6 +624,34 @@ TEST_CASE("parse_csv works on a string") {
     CHECK_THROWS_AS(ob::parse_csv("wrong\n"), std::runtime_error);
 }
 
+TEST_CASE("queries are noexcept") {
+    ob::Book map_book;
+    ob::ArrayBook array_book(100, 200);
+    ob::PoolBook pool_book(100, 200, 4);
+
+    static_assert(noexcept(map_book.best_bid()));
+    static_assert(noexcept(map_book.best_ask()));
+    static_assert(noexcept(map_book.quantity_at(ob::Side::Buy, 100)));
+    static_assert(noexcept(map_book.order_count()));
+    static_assert(noexcept(map_book.level_count(ob::Side::Buy)));
+
+    static_assert(noexcept(array_book.best_bid()));
+    static_assert(noexcept(array_book.best_ask()));
+    static_assert(noexcept(array_book.quantity_at(ob::Side::Buy, 100)));
+    static_assert(noexcept(array_book.order_count()));
+    static_assert(noexcept(array_book.level_count(ob::Side::Buy)));
+
+    static_assert(noexcept(pool_book.best_bid()));
+    static_assert(noexcept(pool_book.best_ask()));
+    static_assert(noexcept(pool_book.quantity_at(ob::Side::Buy, 100)));
+    static_assert(noexcept(pool_book.order_count()));
+    static_assert(noexcept(pool_book.level_count(ob::Side::Buy)));
+    static_assert(noexcept(pool_book.capacity()));
+    static_assert(noexcept(pool_book.memory_bytes()));
+
+    CHECK(true);
+}
+
 TEST_CASE("books are movable but not copyable") {
     static_assert(!std::is_copy_constructible_v<ob::Book>);
     static_assert(!std::is_copy_assignable_v<ob::Book>);
