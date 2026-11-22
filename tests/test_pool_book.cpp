@@ -40,6 +40,41 @@ void apply(BookT& book, const ob::TraceEvent& e) {
     }
 }
 
+template <class BookT>
+void check_modify_crossing(BookT& book, std::vector<ob::Trade>& trades) {
+    const ob::OrderId ask = book.add_limit(ob::Side::Sell, 101, 3);
+    const ob::OrderId bid = book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(trades.empty());
+
+    CHECK(book.modify(bid, 102, 5));
+    REQUIRE(trades.size() == 1);
+    CHECK(trades[0].taker == bid);
+    CHECK(trades[0].maker == ask);
+    CHECK(trades[0].price == 101);
+    CHECK(trades[0].quantity == 3);
+    CHECK(book.best_ask() == std::nullopt);
+    CHECK(book.best_bid() == 102);
+    CHECK(book.quantity_at(ob::Side::Buy, 102) == 2);
+    CHECK(book.order_count() == 1);
+}
+
+template <class BookT>
+void check_modify_full_fill(BookT& book, std::vector<ob::Trade>& trades) {
+    const ob::OrderId ask = book.add_limit(ob::Side::Sell, 101, 5);
+    const ob::OrderId bid = book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(trades.empty());
+
+    CHECK(book.modify(bid, 101, 5));
+    REQUIRE(trades.size() == 1);
+    CHECK(trades[0].taker == bid);
+    CHECK(trades[0].maker == ask);
+    CHECK(trades[0].price == 101);
+    CHECK(trades[0].quantity == 5);
+    CHECK(book.order_count() == 0);
+    CHECK(book.best_bid() == std::nullopt);
+    CHECK(book.best_ask() == std::nullopt);
+}
+
 }  // namespace
 
 void* operator new(std::size_t size) {
@@ -194,6 +229,25 @@ TEST_CASE("books reject a level total that overflows") {
     CHECK_THROWS_AS(pool_book.add_limit(ob::Side::Buy, 100, 1), std::overflow_error);
     CHECK(pool_book.order_count() == 1);
     CHECK(pool_book.quantity_at(ob::Side::Buy, 100) == max);
+
+    ob::Book map_asks;
+    map_asks.add_limit(ob::Side::Sell, 100, max);
+    CHECK_THROWS_AS(map_asks.add_limit(ob::Side::Sell, 100, 1), std::overflow_error);
+    CHECK(map_asks.order_count() == 1);
+    CHECK(map_asks.quantity_at(ob::Side::Sell, 100) == max);
+
+    ob::ArrayBook array_asks(100, 200);
+    array_asks.add_limit(ob::Side::Sell, 100, max);
+    CHECK_THROWS_AS(array_asks.add_limit(ob::Side::Sell, 100, 1),
+                    std::overflow_error);
+    CHECK(array_asks.order_count() == 1);
+    CHECK(array_asks.quantity_at(ob::Side::Sell, 100) == max);
+
+    ob::PoolBook pool_asks(100, 200, 8);
+    pool_asks.add_limit(ob::Side::Sell, 100, max);
+    CHECK_THROWS_AS(pool_asks.add_limit(ob::Side::Sell, 100, 1), std::overflow_error);
+    CHECK(pool_asks.order_count() == 1);
+    CHECK(pool_asks.quantity_at(ob::Side::Sell, 100) == max);
 }
 
 TEST_CASE("books reject ladders whose span overflows a Price") {
@@ -419,6 +473,90 @@ TEST_CASE("trace csv accepts CRLF line endings") {
     CHECK(events[1].op == 'M');
     CHECK(events[1].side == ob::Side::Sell);
     CHECK(events[1].id == 2);
+}
+
+TEST_CASE("empty books answer every query") {
+    ob::Book map_book;
+    ob::ArrayBook array_book(100, 200);
+    ob::PoolBook pool_book(100, 200, 4);
+
+    const auto check_empty = [](auto& book) {
+        CHECK(book.order_count() == 0);
+        CHECK(book.best_bid() == std::nullopt);
+        CHECK(book.best_ask() == std::nullopt);
+        CHECK(book.quantity_at(ob::Side::Buy, 150) == 0);
+        CHECK(book.depth(ob::Side::Buy, 5).empty());
+        CHECK(book.depth(ob::Side::Sell, 5).empty());
+        CHECK(book.level_count(ob::Side::Buy) == 0);
+        CHECK(book.level_count(ob::Side::Sell) == 0);
+        CHECK_FALSE(book.cancel(123));
+        CHECK_FALSE(book.modify(123, 150, 1));
+        CHECK(book.add_market(ob::Side::Buy, 10) == 0);
+    };
+
+    check_empty(map_book);
+    check_empty(array_book);
+    check_empty(pool_book);
+}
+
+TEST_CASE("depth with zero levels returns nothing") {
+    ob::Book map_book;
+    map_book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(map_book.depth(ob::Side::Buy, 0).empty());
+
+    ob::ArrayBook array_book(100, 200);
+    array_book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(array_book.depth(ob::Side::Buy, 0).empty());
+
+    ob::PoolBook pool_book(100, 200, 4);
+    pool_book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(pool_book.depth(ob::Side::Buy, 0).empty());
+}
+
+TEST_CASE("modify can cross the spread and rest the remainder") {
+    std::vector<ob::Trade> map_trades;
+    ob::Book map_book([&](const ob::Trade& t) { map_trades.push_back(t); });
+    check_modify_crossing(map_book, map_trades);
+
+    std::vector<ob::Trade> array_trades;
+    ob::ArrayBook array_book(100, 200,
+                             [&](const ob::Trade& t) { array_trades.push_back(t); });
+    check_modify_crossing(array_book, array_trades);
+
+    std::vector<ob::Trade> pool_trades;
+    ob::PoolBook pool_book(100, 200, 8,
+                           [&](const ob::Trade& t) { pool_trades.push_back(t); });
+    check_modify_crossing(pool_book, pool_trades);
+}
+
+TEST_CASE("modify can fully execute a resting order") {
+    std::vector<ob::Trade> map_trades;
+    ob::Book map_book([&](const ob::Trade& t) { map_trades.push_back(t); });
+    check_modify_full_fill(map_book, map_trades);
+
+    std::vector<ob::Trade> array_trades;
+    ob::ArrayBook array_book(100, 200,
+                             [&](const ob::Trade& t) { array_trades.push_back(t); });
+    check_modify_full_fill(array_book, array_trades);
+
+    std::vector<ob::Trade> pool_trades;
+    ob::PoolBook pool_book(100, 200, 8,
+                           [&](const ob::Trade& t) { pool_trades.push_back(t); });
+    check_modify_full_fill(pool_book, pool_trades);
+}
+
+TEST_CASE("a crossing limit can rest after freeing pool slots") {
+    ob::PoolBook book(100, 200, 2);
+    book.add_limit(ob::Side::Sell, 101, 4);
+    book.add_limit(ob::Side::Sell, 101, 4);
+    CHECK(book.order_count() == 2);
+
+    const ob::OrderId bid = book.add_limit(ob::Side::Buy, 101, 10);
+    CHECK(bid == 3);
+    CHECK(book.order_count() == 1);
+    CHECK(book.best_bid() == 101);
+    CHECK(book.quantity_at(ob::Side::Buy, 101) == 2);
+    CHECK(book.best_ask() == std::nullopt);
 }
 
 TEST_CASE("the three books agree on random modifies") {
