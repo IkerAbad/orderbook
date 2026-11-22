@@ -330,9 +330,10 @@ header must stand on its own.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
-Clang also build with `-Wconversion` and `-Wsign-conversion`. Warnings are errors
-in every compiler job. A separate job checks that line coverage of the library
-sources stays at or above 90 %.
+Clang also build with `-Wconversion` and `-Wsign-conversion`. GCC adds its
+duplicated-condition, logical-op, useless-cast and cast-qual warnings. Warnings
+are errors in every compiler job. A separate job checks that line coverage of
+the library sources stays at or above 90 %.
 
 ## Fuzzing
 
