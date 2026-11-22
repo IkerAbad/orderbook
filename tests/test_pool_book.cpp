@@ -199,6 +199,30 @@ TEST_CASE("pool book reuses released slots") {
     CHECK(book.order_count() == 0);
 }
 
+TEST_CASE("pool book survives many full cycles") {
+    ob::PoolBook book(1000, 2000, 64);
+
+    for (int cycle = 0; cycle < 1000; ++cycle) {
+        for (int i = 0; i < 32; ++i) {
+            book.add_limit(ob::Side::Buy, 1000 + i, 1);
+            book.add_limit(ob::Side::Sell, 2000 - i, 1);
+        }
+
+        REQUIRE(book.order_count() == 64);
+        CHECK(book.best_bid() == 1031);
+        CHECK(book.best_ask() == 1969);
+
+        CHECK(book.add_market(ob::Side::Sell, 32) == 32);
+        CHECK(book.order_count() == 32);
+        CHECK(book.best_bid() == std::nullopt);
+        CHECK(book.best_ask() == 1969);
+
+        CHECK(book.add_market(ob::Side::Buy, 32) == 32);
+        CHECK(book.order_count() == 0);
+        CHECK(book.best_ask() == std::nullopt);
+    }
+}
+
 TEST_CASE("pool book reports a full pool without corrupting the book") {
     ob::PoolBook book(100, 200, 1);
     const ob::OrderId live = book.add_limit(ob::Side::Sell, 150, 5);
