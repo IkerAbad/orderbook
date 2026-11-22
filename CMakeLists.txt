@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(orderbook VERSION 0.1.0 LANGUAGES CXX)
+project(orderbook VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,6 +18,7 @@ endif()
 add_library(orderbook_core STATIC
   src/array_book.cpp
   src/book.cpp
+  src/pool_book.cpp
   src/trace.cpp
 )
 target_include_directories(orderbook_core PUBLIC include)
@@ -33,3 +34,7 @@ enable_testing()
 add_executable(orderbook_tests tests/test_book.cpp)
 target_link_libraries(orderbook_tests PRIVATE orderbook_core doctest::doctest)
 add_test(NAME book COMMAND orderbook_tests)
+
+add_executable(orderbook_pool_tests tests/test_pool_book.cpp)
+target_link_libraries(orderbook_pool_tests PRIVATE orderbook_core doctest::doctest)
+add_test(NAME pool COMMAND orderbook_pool_tests)

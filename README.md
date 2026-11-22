@@ -2,40 +2,79 @@
 
 [![ci](https://github.com/IkerAbad/orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/IkerAbad/orderbook/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-333?style=flat-square)](LICENSE)
-![C++23](https://img.shields.io/badge/C%2B%2B-23-333?style=flat-square&logo=cplusplus&logoColor=white)
+![version](https://img.shields.io/badge/version-0.2.0-333?style=flat-square)
 
 Limit order book and matching engine in C++23. Price-time priority, integer
-prices, no external dependencies, and a benchmark you can reproduce on your own
-machine.
+prices, three implementations of the same contract, no external dependencies,
+and a benchmark you can reproduce on your own machine.
 
 ![Order book depth](docs/depth.gif)
 
-## Two implementations, one contract
+## Three implementations, one contract
 
-The same book is built twice: `Book` keeps price levels in a `std::map`, and
-`ArrayBook` keeps them in a contiguous array indexed by tick. Both are driven
-through the same workload of 1,000,000 events (65 % limit orders, 20 % cancels,
-15 % market orders), single thread, best of three runs.
+All three expose the same methods: `add_limit`, `add_market`, `cancel`,
+`modify`, `best_bid`, `best_ask`, `quantity_at`, `depth`, `order_count` and
+`level_count`.
+
+| | `Book` | `ArrayBook` | `PoolBook` |
+|---|---|---|---|
+| Price levels | `std::map` | contiguous array by tick | contiguous array by tick |
+| Resting orders | `std::list` nodes | `std::list` nodes | preallocated vector, integer links |
+| Order lookup | `std::unordered_map` | `std::unordered_map` | open-addressing table |
+| Heap use per resting order | list node + map node | list node + map node | none |
+| Price range | unbounded | fixed ladder | fixed ladder |
+| Resting capacity | unbounded | unbounded | fixed at construction |
+
+`PoolBook` keeps orders in a `std::vector<Order>` and recycles slots through a
+free list of integer indices. Each price level stores `head` and `tail` indices,
+and the orders at a level form a doubly linked list through two parallel
+`std::vector<std::uint32_t>` arrays. Cancel and matching only move indices.
+
+The id lookup is preallocated too: an open-addressing table with linear probing,
+sized when the book is created. Removing an order reinserts the rest of its
+probe cluster, so lookups keep working without tombstones.
+
+## Benchmark
 
 ```
-$ ./orderbook bench --events 1000000 --seed 42 --runs 3 --impl both
+$ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 workload  1000000 events, seed 42, ladder [9809, 10339]
-map    138.204 ns/event   7235701 events/s   469797 trades
-array  121.934 ns/event   8201131 events/s   469797 trades
+map    136.265 ns/event   7338647 events/s   469797 trades
+array  116.134 ns/event   8610757 events/s   469797 trades
+pool    43.9837 ns/event   22735695 events/s   469797 trades
 ```
 
-Measured on a Ryzen 9 5900X, GCC 14.2, `-O3`. The array is about 12 % faster.
+Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
+single thread, best of three runs. On this run `PoolBook` is 3.1 times faster
+than `Book` and 2.6 times faster than `ArrayBook`. Ten consecutive runs of the
+same command gave 132.8-144.5 ns/event for `map`, 112.6-128.6 for `array` and
+42.7-56.4 for `pool`.
 
-That number is small on purpose, and the reason is the interesting part: the
-cost is dominated by allocating one `std::list` node and one `unordered_map`
-entry per resting order, which both implementations share. The array removes the
-tree walk to reach a price level, not the per-order allocation. Replacing the
-list with an index-based pool is the next step, and it is where the gap should
-become large.
+The workload comes from the same binary:
 
-Per-event latency percentiles are not published because the Windows clock ticks
-at 100 ns, which is the same order as the operation itself. The throughput figure
-does not suffer from that limit.
+```
+$ ./build/orderbook generate --events 1000000 --seed 42 --out trace.csv
+wrote 1000000 events to trace.csv (650012 limit, 199987 cancel, 150001 market)
+```
+
+The generator draws 65 % limit orders, 20 % cancels and 15 % market orders. A
+cancel is only emitted when a live order exists, otherwise the event becomes a
+market order, which explains the small drift from the exact percentages.
+
+### Where the time goes
+
+- `map` to `array` saves 20.1 ns/event, 14.8 % of the map time. Price-level
+  lookup stops walking a red-black tree and stops allocating a node for every
+  new price.
+- `array` to `pool` saves 72.2 ns/event, 62.1 % of the array time. A resting
+  limit order stops allocating a `std::list` node and an `unordered_map` node,
+  and matching stops chasing two pointers per order.
+- The second change is about 3.6 times larger than the first. That is the
+  measured answer to why the array alone did not stand out: both earlier books
+  paid the per-order allocation, and 65 % of the events are limit orders.
+- The remaining 44 ns/event are the match loop, the callback, the trade
+  counters, the id hash and ordinary branch and cache misses. This build does
+  not profile them further.
 
 ## What it does
 
@@ -43,7 +82,7 @@ does not suffer from that limit.
   one filled.
 - Market orders that walk the book until the quantity is exhausted or the book
   is empty.
-- `cancel` in O(1) through an id index, with no allocation.
+- `cancel` in O(1) through a direct index, with no allocation in `PoolBook`.
 - `modify` that follows the exchange rule: a price change or a size increase
   loses time priority, a size decrease keeps it.
 - Trades always execute at the resting order's price. The maker decides.
@@ -61,6 +100,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+The benchmark numbers above were produced with Ninja and GCC 14.2:
+
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+cmake --build build
+```
+
 ## Use
 
 ```
@@ -70,8 +116,8 @@ ctest --test-dir build --output-on-failure
 # replay it and print the final state of the book
 ./build/orderbook replay trace.csv
 
-# compare both implementations
-./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl both
+# compare the three implementations
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 
 # export depth snapshots for the plot
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
@@ -91,11 +137,22 @@ book.add_limit(ob::Side::Buy, 10000, 25);   // rests at 10000
 book.add_limit(ob::Side::Sell, 10000, 10);  // fills 10 at 10000
 ```
 
-`ArrayBook` takes the price ladder range in its constructor:
+`ArrayBook` and `PoolBook` take the price ladder range in the constructor.
+`PoolBook` also takes the number of orders that can rest at once:
 
 ```cpp
-ob::ArrayBook book(9900, 10100, on_trade);
+#include <orderbook/array_book.hpp>
+#include <orderbook/pool_book.hpp>
+
+ob::ArrayBook array_book(9900, 10100, on_trade);
+ob::PoolBook pool_book(9900, 10100, 500000, on_trade);
 ```
+
+A price outside the ladder throws `std::out_of_range`. If the remainder of an
+order would need a slot and the pool is full, `add_limit` throws
+`std::overflow_error`. A non-crossing order in that situation leaves the book
+unchanged. A crossing order keeps the trades it already executed, because they
+were matched before the remainder looked for a slot.
 
 ## Design decisions
 
@@ -107,12 +164,15 @@ unreliable. Every serious engine works in integer ticks.
 101, not at the buyer's limit. This is how equities and futures work, and it is
 the opposite of what a naive implementation does.
 
-**Cancel is O(1).** The book keeps an `unordered_map<OrderId, Location>` where
-`Location` holds the level and a `std::list` iterator. Removing an order is a
-list erase plus a map erase, with no search.
+**Cancel is O(1).** `Book` and `ArrayBook` keep an `unordered_map<OrderId,
+Location>` where `Location` holds the level and a `std::list` iterator.
+`PoolBook` maps the id to a pool slot with an open-addressing table and unlinks
+the slot from its level through `prev` and `next` indices.
 
-**Insert allocates, the hot path does not.** Resting an order allocates a list
-node and an index entry. Matching a resting order never does.
+**The pool removes the hot-path allocation.** `PoolBook` reserves every order
+slot and every link when it is constructed. Resting, cancelling and matching
+never touch the heap. The price is a fixed capacity chosen by the caller, and a
+full pool is an error instead of a hidden `malloc`.
 
 **One thread.** Determinism is worth more than parallelism here. A benchmark
 with threads measures the scheduler as much as the book.
@@ -123,34 +183,52 @@ with threads measures the scheduler as much as the book.
 - No persistence and no network gateway.
 - The synthetic generator is a Poisson-like flow, not real market data. The CSV
   format exists so real captures can be replayed later.
-- `ArrayBook` needs a fixed price range. Outside it, the price is rejected.
-- The per-order allocation is still there. A pool of orders with integer indices
-  instead of pointers is the next improvement, and the one that should separate
-  the two implementations by a wide margin.
+- `ArrayBook` and `PoolBook` need a fixed price range. Outside it, the price is
+  rejected.
+- `PoolBook` needs a bound on resting orders. In the benchmark the bound is the
+  number of limit events, which is safe but conservative. A production
+  deployment would size the pool from its peak live orders plus a margin.
+- Per-event latency percentiles are not published because the Windows clock
+  ticks at 100 ns, which is the same order as the operation itself. The
+  throughput figure does not suffer from that limit.
 
 ## Tests
 
-20 cases covering priority rules, partial fills, market orders walking several
-levels, cancel and modify semantics, the spread invariant under a random
-workload, trace reproducibility, the array ladder range, and a differential test
-that runs the same 20,000-event workload through both books and compares the
-best prices, the resting orders and the executed volume. CI runs them on Linux
-and Windows.
+31 cases. The original 19 stay unchanged and cover priority rules, partial
+fills, market orders walking several levels, cancel and modify semantics, the
+spread invariant under a random workload, trace reproducibility and the array
+ladder range. Running `./build/orderbook_tests` reports those 19 cases.
+
+The 12 new cases cover the pool: slot reuse, a middle cancel that must not break
+the intrusive list, a full pool, invalid ladders and capacities, depth, and
+modify with an invalid price that must keep the original order. A differential
+test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook` and compares
+the best prices, live orders, level counts, every trade and the executed volume.
+Running `./build/orderbook_pool_tests` reports the 12 new cases.
+
+CI runs the tests on Linux and Windows, with GCC and MSVC.
 
 ## Español
 
 Libro de órdenes y motor de matching en C++23, con prioridad precio-tiempo,
 precios enteros y benchmark reproducible. Sin dependencias externas.
 
-Hay dos implementaciones del mismo contrato: una con niveles en `std::map` y otra
-con un array contiguo indexado por tick. Sobre un millón de eventos, la segunda
-es un 12 % más rápida. La diferencia es pequeña porque el coste dominante es la
-reserva de memoria por orden, que ambas comparten.
+Hay tres implementaciones del mismo contrato: una con niveles en `std::map`,
+otra con un array contiguo indexado por tick y una tercera que añade un pool de
+órdenes. Las dos primeras reservan memoria por cada orden que descansa en el
+libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
+enteros, así que cancelar y casar no hacen ninguna reserva.
+
+Sobre un millón de eventos, `PoolBook` es 3,1 veces más rápido que la versión
+con `std::map` y 2,6 veces más rápido que la versión con array. El cambio de
+`map` a array ahorra 20,1 ns por evento. El cambio de array a pool ahorra 72,2
+ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
+por cada orden. Esa era la parte que impedía que el array destacara.
 
 Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrido
 de niveles por parte de las órdenes a mercado, la semántica de `cancel` y
-`modify`, el rango del array y una comparación diferencial entre las dos
-implementaciones con la misma carga.
+`modify`, el rango del array, el pool lleno, la reutilización de huecos y una
+comparación diferencial entre las tres implementaciones con la misma carga.
 
 ## License
 

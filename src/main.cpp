@@ -1,5 +1,6 @@
 #include "orderbook/array_book.hpp"
 #include "orderbook/book.hpp"
+#include "orderbook/pool_book.hpp"
 #include "orderbook/trace.hpp"
 
 #include <algorithm>
@@ -21,7 +22,7 @@ void usage() {
         "usage:\n"
         "  orderbook generate --events N --seed S --out FILE\n"
         "  orderbook replay FILE\n"
-        "  orderbook bench --events N --seed S [--runs R] [--impl map|array|both]\n"
+        "  orderbook bench --events N --seed S [--runs R] [--impl map|array|pool|both|all]\n"
         "  orderbook depth --events N --seed S --frames K --out FILE\n";
 }
 
@@ -53,7 +54,21 @@ int run_generate(std::uint64_t events, std::uint64_t seed, const std::string& ou
         return 1;
     }
 
-    std::cout << "wrote " << trace.size() << " events to " << out << '\n';
+    std::uint64_t limits = 0;
+    std::uint64_t cancels = 0;
+    std::uint64_t markets = 0;
+    for (const ob::TraceEvent& e : trace) {
+        if (e.op == 'L') {
+            ++limits;
+        } else if (e.op == 'C') {
+            ++cancels;
+        } else if (e.op == 'M') {
+            ++markets;
+        }
+    }
+
+    std::cout << "wrote " << trace.size() << " events to " << out << " (" << limits
+              << " limit, " << cancels << " cancel, " << markets << " market)\n";
     return 0;
 }
 
@@ -149,13 +164,23 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
 
     const auto trace = ob::generate(options);
 
+    const bool want_map = impl == "map" || impl == "both" || impl == "all";
+    const bool want_array = impl == "array" || impl == "both" || impl == "all";
+    const bool want_pool = impl == "pool" || impl == "all";
+    if (!want_map && !want_array && !want_pool) {
+        std::cerr << "--impl must be map, array, pool, both or all\n";
+        return 1;
+    }
+
     ob::Price lo = 0;
     ob::Price hi = 0;
     bool seen = false;
+    std::size_t limit_events = 0;
     for (const ob::TraceEvent& e : trace) {
         if (e.op != 'L') {
             continue;
         }
+        ++limit_events;
         if (!seen) {
             lo = hi = e.price;
             seen = true;
@@ -176,13 +201,6 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
     std::cout << "workload  " << trace.size() << " events, seed " << seed
               << ", ladder [" << lo << ", " << hi << "]\n";
 
-    const bool want_map = impl == "map" || impl == "both";
-    const bool want_array = impl == "array" || impl == "both";
-    if (!want_map && !want_array) {
-        std::cerr << "--impl must be map, array or both\n";
-        return 1;
-    }
-
     if (want_map) {
         const BenchResult r = bench_impl<ob::Book>(
             trace, runs, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
@@ -197,6 +215,16 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
                 return ob::ArrayBook(lo, hi, std::move(cb));
             });
         std::cout << "array  " << r.ns_per_event << " ns/event   "
+                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
+                  << r.trades << " trades\n";
+    }
+
+    if (want_pool) {
+        const BenchResult r = bench_impl<ob::PoolBook>(
+            trace, runs, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
+                return ob::PoolBook(lo, hi, limit_events, std::move(cb));
+            });
+        std::cout << "pool   " << r.ns_per_event << " ns/event   "
                   << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
                   << r.trades << " trades\n";
     }
@@ -264,7 +292,7 @@ int main(int argc, char** argv) {
     std::size_t frames = 60;
     std::string out;
     std::string input;
-    std::string impl = "both";
+    std::string impl = "all";
 
     try {
         for (std::size_t i = 1; i < args.size(); ++i) {
