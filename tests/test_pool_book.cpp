@@ -7,11 +7,16 @@
 #include "orderbook/trace.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <new>
 #include <stdexcept>
 #include <vector>
 
 namespace {
+
+std::size_t g_allocations = 0;
 
 template <class BookT>
 void apply(BookT& book, const ob::TraceEvent& e) {
@@ -31,6 +36,50 @@ void apply(BookT& book, const ob::TraceEvent& e) {
 }
 
 }  // namespace
+
+void* operator new(std::size_t size) {
+    ++g_allocations;
+    if (void* p = std::malloc(size == 0 ? 1 : size)) {
+        return p;
+    }
+    throw std::bad_alloc();
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+void operator delete(void* p) noexcept {
+    std::free(p);
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+void operator delete(void* p, std::size_t) noexcept {
+    std::free(p);
+}
+
+void* operator new[](std::size_t size) {
+    ++g_allocations;
+    if (void* p = std::malloc(size == 0 ? 1 : size)) {
+        return p;
+    }
+    throw std::bad_alloc();
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+void operator delete[](void* p) noexcept {
+    std::free(p);
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+void operator delete[](void* p, std::size_t) noexcept {
+    std::free(p);
+}
 
 TEST_CASE("pool book rests a limit order") {
     ob::PoolBook book(100, 200, 8);
@@ -190,6 +239,48 @@ TEST_CASE("pool book exposes depth and rejects out-of-range quantities") {
     CHECK(depth[1].first == 101);
     CHECK(depth[1].second == 4);
     CHECK(book.quantity_at(ob::Side::Buy, 999) == 0);
+}
+
+TEST_CASE("pool book does not allocate while it runs") {
+    ob::PoolBook book(1000, 2000, 256, [](const ob::Trade&) {});
+
+    const auto exercise = [&book]() {
+        for (int i = 0; i < 50; ++i) {
+            const ob::OrderId id = book.add_limit(ob::Side::Buy, 1100 + i, 5);
+            book.cancel(id);
+        }
+        for (int i = 0; i < 50; ++i) {
+            book.add_limit(ob::Side::Sell, 1900 + i, 5);
+        }
+        book.add_market(ob::Side::Buy, 250);
+        for (int i = 0; i < 20; ++i) {
+            const ob::OrderId id = book.add_limit(ob::Side::Buy, 1200 + i, 10);
+            book.modify(id, 1200 + i, 5);
+            book.modify(id, 1300 + i, 5);
+            book.cancel(id);
+        }
+    };
+
+    exercise();
+    CHECK(book.order_count() == 0);
+
+    const std::size_t before = g_allocations;
+    for (int round = 0; round < 50; ++round) {
+        exercise();
+    }
+    const std::size_t measured = g_allocations;
+
+    CHECK(book.order_count() == 0);
+    CHECK(measured == before);
+
+    // Positive control: the counter must see a deliberate allocation.
+    std::size_t after_probe = 0;
+    {
+        std::vector<int> probe(4, 7);
+        after_probe = g_allocations;
+        CHECK(probe[0] == 7);
+    }
+    CHECK(after_probe > measured);
 }
 
 TEST_CASE("the three books agree on a random workload") {

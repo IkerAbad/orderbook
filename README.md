@@ -194,17 +194,19 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-31 cases. The original 19 stay unchanged and cover priority rules, partial
+32 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 12 new cases cover the pool: slot reuse, a middle cancel that must not break
-the intrusive list, a full pool, invalid ladders and capacities, depth, and
-modify with an invalid price that must keep the original order. A differential
-test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook` and compares
-the best prices, live orders, level counts, every trade and the executed volume.
-Running `./build/orderbook_pool_tests` reports the 12 new cases.
+The 13 new cases cover the pool: slot reuse, a middle cancel that must not break
+the intrusive list, a full pool, invalid ladders and capacities, depth, modify
+with an invalid price that must keep the original order, and a counter that
+replaces global `operator new` and asserts that 50 rounds of adding, matching,
+modifying and cancelling do not allocate. A differential test runs 20,000
+events through `Book`, `ArrayBook` and `PoolBook` and compares the best prices,
+live orders, level counts, every trade and the executed volume. Running
+`./build/orderbook_pool_tests` reports the 13 new cases.
 
 CI runs the tests on Linux and Windows, with GCC and MSVC.
 
@@ -227,8 +229,9 @@ por cada orden. Esa era la parte que impedía que el array destacara.
 
 Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrido
 de niveles por parte de las órdenes a mercado, la semántica de `cancel` y
-`modify`, el rango del array, el pool lleno, la reutilización de huecos y una
-comparación diferencial entre las tres implementaciones con la misma carga.
+`modify`, el rango del array, el pool lleno, la reutilización de huecos, la
+ausencia de reservas en régimen y una comparación diferencial entre las tres
+implementaciones con la misma carga.
 
 ## License
 
