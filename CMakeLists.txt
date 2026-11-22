@@ -47,6 +47,13 @@ if(BUILD_TESTING)
   target_link_libraries(orderbook_pool_tests PRIVATE orderbook_core doctest::doctest)
   add_test(NAME pool COMMAND orderbook_pool_tests)
 
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # doctest 2.4.11 includes <ciso646> for Clang, which emits a #warning
+    # under C++20 and later with libstdc++ 15.
+    target_compile_options(orderbook_tests PRIVATE "-Wno-#warnings")
+    target_compile_options(orderbook_pool_tests PRIVATE "-Wno-#warnings")
+  endif()
+
   add_test(NAME cli_zero_frames
     COMMAND orderbook depth --events 10 --seed 1 --frames 0
             --out ${CMAKE_CURRENT_BINARY_DIR}/zero_frames.csv)
