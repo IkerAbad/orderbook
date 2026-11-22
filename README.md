@@ -157,6 +157,22 @@ order would need a slot and the pool is full, `add_limit` throws
 unchanged. A crossing order keeps the trades it already executed, because they
 were matched before the remainder looked for a slot.
 
+## Install
+
+```
+cmake --install build --prefix /some/prefix
+```
+
+The install exports `orderbook::orderbook_core` for `find_package`:
+
+```cmake
+find_package(orderbook 0.2 CONFIG REQUIRED)
+target_link_libraries(app PRIVATE orderbook::orderbook_core)
+```
+
+Set `-DBUILD_TESTING=OFF` to skip the tests when the project is included as a
+subdirectory or packaged.
+
 ## Design decisions
 
 **Prices are integers.** `Price` is `std::int64_t` counted in ticks. Floating
@@ -219,8 +235,9 @@ count and an empty file, and it accepts CRLF line endings. Running
 `./build/orderbook_pool_tests` reports the 19 new cases. Two CLI checks pass
 `--runs 0` and `--frames 0` and require the error message instead of a crash.
 
-CI runs the tests on Linux and Windows with GCC and MSVC, and runs them again
-under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu.
+CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
+and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. Warnings
+are errors in every job.
 
 ## Español
 
