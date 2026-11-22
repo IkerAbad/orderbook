@@ -262,6 +262,13 @@ TEST_CASE("books reject a level total that overflows") {
     CHECK(pool_asks.quantity_at(ob::Side::Sell, 100) == max);
 }
 
+TEST_CASE("pool memory grows with capacity") {
+    ob::PoolBook small(100, 200, 8);
+    ob::PoolBook large(100, 200, 1024);
+    CHECK(small.memory_bytes() > 0);
+    CHECK(large.memory_bytes() > small.memory_bytes());
+}
+
 TEST_CASE("books reject ladders whose span overflows a Price") {
     constexpr ob::Price lo = std::numeric_limits<ob::Price>::min();
     constexpr ob::Price hi = std::numeric_limits<ob::Price>::max();

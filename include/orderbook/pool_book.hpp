@@ -42,6 +42,9 @@ public:
     [[nodiscard]] std::size_t level_count(Side side) const;
     [[nodiscard]] std::size_t capacity() const { return orders_.size(); }
 
+    // Bytes reserved by the vectors, excluding their object overhead.
+    [[nodiscard]] std::size_t memory_bytes() const;
+
 private:
     static constexpr std::uint32_t kNone = 0xFFFF'FFFFu;
     static constexpr std::size_t kMissing = static_cast<std::size_t>(-1);

@@ -206,32 +206,65 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
     std::cout << "workload  " << trace.size() << " events, seed " << seed
               << ", ladder [" << lo << ", " << hi << "]\n";
 
+    BenchResult map_result{};
+    BenchResult array_result{};
+    BenchResult pool_result{};
+    bool have_map = false;
+    bool have_array = false;
+    bool have_pool = false;
+
     if (want_map) {
-        const BenchResult r = bench_impl<ob::Book>(
+        map_result = bench_impl<ob::Book>(
             trace, runs, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
-        std::cout << "map    " << r.ns_per_event << " ns/event   "
-                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
-                  << r.trades << " trades\n";
+        have_map = true;
     }
 
     if (want_array) {
-        const BenchResult r = bench_impl<ob::ArrayBook>(
+        array_result = bench_impl<ob::ArrayBook>(
             trace, runs, [lo, hi](ob::ArrayBook::TradeCallback cb) {
                 return ob::ArrayBook(lo, hi, std::move(cb));
             });
-        std::cout << "array  " << r.ns_per_event << " ns/event   "
-                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
-                  << r.trades << " trades\n";
+        have_array = true;
     }
 
     if (want_pool) {
-        const BenchResult r = bench_impl<ob::PoolBook>(
+        pool_result = bench_impl<ob::PoolBook>(
             trace, runs, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
                 return ob::PoolBook(lo, hi, limit_events, std::move(cb));
             });
-        std::cout << "pool   " << r.ns_per_event << " ns/event   "
+        have_pool = true;
+    }
+
+    const auto mismatch = [](const BenchResult& a, const BenchResult& b) {
+        return a.trades != b.trades || a.volume != b.volume;
+    };
+    if ((have_map && have_array && mismatch(map_result, array_result)) ||
+        (have_map && have_pool && mismatch(map_result, pool_result)) ||
+        (have_array && have_pool && mismatch(array_result, pool_result))) {
+        std::cerr << "benchmark implementations disagree on trades or volume\n";
+        return 1;
+    }
+
+    const auto print = [](const char* name, const BenchResult& r) {
+        std::cout << name << r.ns_per_event << " ns/event   "
                   << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
                   << r.trades << " trades\n";
+    };
+
+    if (have_map) {
+        print("map    ", map_result);
+    }
+    if (have_array) {
+        print("array  ", array_result);
+    }
+    if (have_pool) {
+        print("pool   ", pool_result);
+
+        const ob::PoolBook probe(lo, hi, limit_events);
+        const double mib =
+            static_cast<double>(probe.memory_bytes()) / (1024.0 * 1024.0);
+        std::cout << "pool memory  " << mib << " MiB, " << limit_events
+                  << " slots\n";
     }
 
     return 0;

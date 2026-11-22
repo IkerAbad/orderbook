@@ -461,4 +461,14 @@ std::size_t PoolBook::level_count(Side side) const {
         [](const Level& level) { return level.head != kNone; }));
 }
 
+std::size_t PoolBook::memory_bytes() const {
+    return orders_.capacity() * sizeof(Order) +
+           next_.capacity() * sizeof(std::uint32_t) +
+           prev_.capacity() * sizeof(std::uint32_t) +
+           keys_.capacity() * sizeof(OrderId) +
+           slots_.capacity() * sizeof(std::uint32_t) +
+           bids_.capacity() * sizeof(Level) +
+           asks_.capacity() * sizeof(Level);
+}
+
 }  // namespace ob

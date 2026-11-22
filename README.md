@@ -39,16 +39,21 @@ probe cluster, so lookups keep working without tombstones.
 ```
 $ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 workload  1000000 events, seed 42, ladder [9809, 10339]
-map    143.101 ns/event   6988061 events/s   457777 trades
-array  123.159 ns/event   8119618 events/s   457777 trades
-pool    41.7662 ns/event   23942805 events/s   457777 trades
+map    147.890 ns/event   6761800 events/s   457777 trades
+array  122.872 ns/event   8138530 events/s   457777 trades
+pool    44.1967 ns/event   22626123 events/s   457777 trades
+pool memory  36.8122 MiB, 650012 slots
 ```
 
 Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
-single thread, best of three runs. On this run `PoolBook` is 3.4 times faster
-than `Book` and 2.9 times faster than `ArrayBook`. Ten consecutive runs of the
-same command gave 137.0-153.1 ns/event for `map`, 119.4-137.8 for `array` and
-41.2-54.9 for `pool`.
+single thread, best of three runs. On this run `PoolBook` is 3.3 times faster
+than `Book` and 2.8 times faster than `ArrayBook`. Ten consecutive runs of the
+same command gave 140.4-156.7 ns/event for `map`, 120.8-136.6 for `array` and
+41.0-49.1 for `pool`. The pool line is followed by the memory reserved for its
+vectors: 36.8 MiB for 650,012 slots and the id table. The trace itself is not
+included. When more than one implementation runs, the command also checks that
+they produced the same trade count and volume before printing. A mismatch fails
+the run.
 
 The workload comes from the same binary:
 
@@ -66,16 +71,16 @@ explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 19.9 ns/event, 13.9 % of the map time. Price-level
+- `map` to `array` saves 25.0 ns/event, 16.9 % of the map time. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 81.4 ns/event, 66.1 % of the array time. A resting
+- `array` to `pool` saves 78.7 ns/event, 64.0 % of the array time. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
-- The second change is about 4.1 times larger than the first. That is the
+- The second change is about 3.1 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
   paid the per-order allocation, and 65 % of the events are limit orders.
-- The remaining 42 ns/event are the match loop, the callback, the trade
+- The remaining 44 ns/event are the match loop, the callback, the trade
   counters, the id hash and ordinary branch and cache misses. This build does
   not profile them further.
 
@@ -178,7 +183,8 @@ A price outside the ladder throws `std::out_of_range`. If the remainder of an
 order would need a slot and the pool is full, `add_limit` throws
 `std::overflow_error`. A non-crossing order in that situation leaves the book
 unchanged. A crossing order keeps the trades it already executed, because they
-were matched before the remainder looked for a slot.
+were matched before the remainder looked for a slot. `PoolBook::memory_bytes()`
+returns the bytes reserved by its vectors.
 
 ## Install
 
@@ -241,24 +247,24 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-46 cases. The original 19 stay unchanged and cover priority rules, partial
+47 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 27 new cases cover the pool and the edges around it: slot reuse, a middle
+The 28 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, a full pool, invalid ladders and
 capacities, spans that overflow `Price`, level totals that overflow `Quantity`,
 depth, empty books, zero-depth queries, modify crossing the spread, modify fully
-executing, a crossing order that frees pool slots, and a counter that replaces
-global `operator new` and asserts that 50 rounds of adding, matching, modifying
-and cancelling do not allocate. They also check that every limit and market
-event consumes one id, so the cancels in a generated trace reference the order
-the book actually assigned, and that `parse_csv` works without a file. The CSV
-reader round-trips a generated trace and rejects a bad header, a bad op, a bad
-side, a non-numeric field, a wrong field count and an empty file, and it accepts
-CRLF line endings. Running `./build/orderbook_pool_tests` reports the 27 new
-cases.
+executing, a crossing order that frees pool slots, the memory footprint, and a
+counter that replaces global `operator new` and asserts that 50 rounds of
+adding, matching, modifying and cancelling do not allocate. They also check that
+every limit and market event consumes one id, so the cancels in a generated
+trace reference the order the book actually assigned, and that `parse_csv` works
+without a file. The CSV reader round-trips a generated trace and rejects a bad
+header, a bad op, a bad side, a non-numeric field, a wrong field count and an
+empty file, and it accepts CRLF line endings. Running
+`./build/orderbook_pool_tests` reports the 28 new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
@@ -303,9 +309,9 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 3,4 veces más rápido que la versión
-con `std::map` y 2,9 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 19,9 ns por evento. El cambio de array a pool ahorra 81,4
+Sobre un millón de eventos, `PoolBook` es 3,3 veces más rápido que la versión
+con `std::map` y 2,8 veces más rápido que la versión con array. El cambio de
+`map` a array ahorra 25,0 ns por evento. El cambio de array a pool ahorra 78,7
 ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
 por cada orden. Esa era la parte que impedía que el array destacara.
 
