@@ -211,7 +211,8 @@ and compares the best prices, live orders, level counts, every trade and the
 executed volume. Running `./build/orderbook_pool_tests` reports the 14 new
 cases.
 
-CI runs the tests on Linux and Windows, with GCC and MSVC.
+CI runs the tests on Linux and Windows with GCC and MSVC, and runs them again
+under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu.
 
 ## Español
 

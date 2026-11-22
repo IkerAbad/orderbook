@@ -5,7 +5,6 @@
 #include <random>
 #include <stdexcept>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace ob {
@@ -52,7 +51,6 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
     events.reserve(options.events);
 
     std::vector<OrderId> live;
-    std::unordered_map<OrderId, std::size_t> position;
     live.reserve(options.events / 2);
 
     Price mid = options.mid;
@@ -78,7 +76,6 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
             event.quantity = size(rng);
             event.id = next_id;
             live.push_back(next_id);
-            position[next_id] = live.size() - 1;
             ++next_id;
         } else if (roll < 85 && !live.empty()) {
             std::uniform_int_distribution<std::size_t> pick(0, live.size() - 1);
@@ -91,9 +88,7 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
             event.quantity = 0;
 
             live[idx] = live.back();
-            position[live[idx]] = idx;
             live.pop_back();
-            position.erase(id);
         } else {
             event.op = 'M';
             event.price = 0;
