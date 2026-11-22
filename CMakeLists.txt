@@ -38,3 +38,14 @@ add_test(NAME book COMMAND orderbook_tests)
 add_executable(orderbook_pool_tests tests/test_pool_book.cpp)
 target_link_libraries(orderbook_pool_tests PRIVATE orderbook_core doctest::doctest)
 add_test(NAME pool COMMAND orderbook_pool_tests)
+
+add_test(NAME cli_zero_frames
+  COMMAND orderbook depth --events 10 --seed 1 --frames 0
+          --out ${CMAKE_CURRENT_BINARY_DIR}/zero_frames.csv)
+set_tests_properties(cli_zero_frames PROPERTIES
+  PASS_REGULAR_EXPRESSION "--frames must be at least 1")
+
+add_test(NAME cli_zero_runs
+  COMMAND orderbook bench --events 10 --seed 1 --runs 0 --impl all)
+set_tests_properties(cli_zero_runs PROPERTIES
+  PASS_REGULAR_EXPRESSION "--runs must be at least 1")

@@ -158,6 +158,11 @@ BenchResult bench_impl(const std::vector<ob::TraceEvent>& trace, int runs, Facto
 }
 
 int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::string& impl) {
+    if (runs < 1) {
+        std::cerr << "--runs must be at least 1\n";
+        return 1;
+    }
+
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;
@@ -234,6 +239,11 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
 
 int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
               const std::string& out) {
+    if (frames == 0) {
+        std::cerr << "--frames must be at least 1\n";
+        return 1;
+    }
+
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;

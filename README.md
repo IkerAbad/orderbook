@@ -209,7 +209,8 @@ that 50 rounds of adding, matching, modifying and cancelling do not allocate. A
 differential test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook`
 and compares the best prices, live orders, level counts, every trade and the
 executed volume. Running `./build/orderbook_pool_tests` reports the 14 new
-cases.
+cases. Two CLI checks pass `--runs 0` and `--frames 0` and require the error
+message instead of a crash.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, and runs them again
 under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu.
