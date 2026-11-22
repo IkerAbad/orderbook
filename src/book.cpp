@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
+#include <stdexcept>
 
 namespace ob {
 
@@ -11,12 +13,22 @@ void Book::rest(Order order) {
     Location loc{order.side, order.price, {}};
 
     if (order.side == Side::Buy) {
-        auto& level = bids_[order.price];
+        auto [it, inserted] = bids_.try_emplace(order.price);
+        Level& level = it->second;
+        if (!inserted &&
+            order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
+            throw std::overflow_error("level quantity overflow");
+        }
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());
     } else {
-        auto& level = asks_[order.price];
+        auto [it, inserted] = asks_.try_emplace(order.price);
+        Level& level = it->second;
+        if (!inserted &&
+            order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
+            throw std::overflow_error("level quantity overflow");
+        }
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());

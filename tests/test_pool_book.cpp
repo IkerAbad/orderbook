@@ -174,6 +174,28 @@ TEST_CASE("pool book validates its ladder and its capacity") {
     CHECK(book.order_count() == 0);
 }
 
+TEST_CASE("books reject a level total that overflows") {
+    constexpr ob::Quantity max = std::numeric_limits<ob::Quantity>::max();
+
+    ob::Book map_book;
+    map_book.add_limit(ob::Side::Buy, 100, max);
+    CHECK_THROWS_AS(map_book.add_limit(ob::Side::Buy, 100, 1), std::overflow_error);
+    CHECK(map_book.order_count() == 1);
+    CHECK(map_book.quantity_at(ob::Side::Buy, 100) == max);
+
+    ob::ArrayBook array_book(100, 200);
+    array_book.add_limit(ob::Side::Buy, 100, max);
+    CHECK_THROWS_AS(array_book.add_limit(ob::Side::Buy, 100, 1), std::overflow_error);
+    CHECK(array_book.order_count() == 1);
+    CHECK(array_book.quantity_at(ob::Side::Buy, 100) == max);
+
+    ob::PoolBook pool_book(100, 200, 8);
+    pool_book.add_limit(ob::Side::Buy, 100, max);
+    CHECK_THROWS_AS(pool_book.add_limit(ob::Side::Buy, 100, 1), std::overflow_error);
+    CHECK(pool_book.order_count() == 1);
+    CHECK(pool_book.quantity_at(ob::Side::Buy, 100) == max);
+}
+
 TEST_CASE("books reject ladders whose span overflows a Price") {
     constexpr ob::Price lo = std::numeric_limits<ob::Price>::min();
     constexpr ob::Price hi = std::numeric_limits<ob::Price>::max();

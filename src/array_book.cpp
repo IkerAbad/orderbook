@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -76,6 +77,9 @@ void ArrayBook::rest(Order order) {
 
     if (order.side == Side::Buy) {
         auto& level = bids_[i];
+        if (order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
+            throw std::overflow_error("level quantity overflow");
+        }
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());
@@ -85,6 +89,9 @@ void ArrayBook::rest(Order order) {
         }
     } else {
         auto& level = asks_[i];
+        if (order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
+            throw std::overflow_error("level quantity overflow");
+        }
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());

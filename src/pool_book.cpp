@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -206,22 +207,23 @@ void PoolBook::advance_ask() {
 
 void PoolBook::rest(Order order) {
     const std::size_t i = index_of(order.price);
-    const std::uint32_t slot = alloc_slot();
+    Level& level = order.side == Side::Buy ? bids_[i] : asks_[i];
 
+    if (order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
+        throw std::overflow_error("level quantity overflow");
+    }
+
+    const std::uint32_t slot = alloc_slot();
     orders_[slot] = order;
+    push_back(level, slot);
+    level.total += order.quantity;
 
     if (order.side == Side::Buy) {
-        Level& level = bids_[i];
-        push_back(level, slot);
-        level.total += order.quantity;
         if (!has_bid_ || i > best_bid_) {
             best_bid_ = i;
             has_bid_ = true;
         }
     } else {
-        Level& level = asks_[i];
-        push_back(level, slot);
-        level.total += order.quantity;
         if (!has_ask_ || i < best_ask_) {
             best_ask_ = i;
             has_ask_ = true;

@@ -39,16 +39,16 @@ probe cluster, so lookups keep working without tombstones.
 ```
 $ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 workload  1000000 events, seed 42, ladder [9809, 10339]
-map    141.048 ns/event   7089800 events/s   457777 trades
-array  120.061 ns/event   8329099 events/s   457777 trades
-pool    42.1251 ns/event   23738816 events/s   457777 trades
+map    143.101 ns/event   6988061 events/s   457777 trades
+array  123.159 ns/event   8119618 events/s   457777 trades
+pool    41.7662 ns/event   23942805 events/s   457777 trades
 ```
 
 Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
-single thread, best of three runs. On this run `PoolBook` is 3.3 times faster
+single thread, best of three runs. On this run `PoolBook` is 3.4 times faster
 than `Book` and 2.9 times faster than `ArrayBook`. Ten consecutive runs of the
-same command gave 138.9-154.5 ns/event for `map`, 118.3-134.9 for `array` and
-41.7-53.3 for `pool`.
+same command gave 137.0-153.1 ns/event for `map`, 119.4-137.8 for `array` and
+41.2-54.9 for `pool`.
 
 The workload comes from the same binary:
 
@@ -66,13 +66,13 @@ explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 21.0 ns/event, 14.9 % of the map time. Price-level
+- `map` to `array` saves 19.9 ns/event, 13.9 % of the map time. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 77.9 ns/event, 64.9 % of the array time. A resting
+- `array` to `pool` saves 81.4 ns/event, 66.1 % of the array time. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
-- The second change is about 3.7 times larger than the first. That is the
+- The second change is about 4.1 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
   paid the per-order allocation, and 65 % of the events are limit orders.
 - The remaining 42 ns/event are the match loop, the callback, the trade
@@ -213,27 +213,28 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-38 cases. The original 19 stay unchanged and cover priority rules, partial
+39 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 19 new cases cover the pool: slot reuse, a middle cancel that must not break
+The 20 new cases cover the pool: slot reuse, a middle cancel that must not break
 the intrusive list, a full pool, invalid ladders, capacities and a span that
-overflows `Price`, depth, modify with an invalid price that must keep the
-original order, and a counter that replaces global `operator new` and asserts
-that 50 rounds of adding, matching, modifying and cancelling do not allocate.
-They also check that every limit and market event consumes one id, so the
-cancels in a generated trace reference the order the book actually assigned. A
-differential test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook`
-and compares the best prices, live orders, level counts, every trade and the
-executed volume. A second differential test runs 5,000 random operations with
-modifies through the three books and compares the depth, the best prices, the
-return values and every trade. The CSV reader round-trips a generated trace and
-rejects a bad header, a bad op, a bad side, a non-numeric field, a wrong field
-count and an empty file, and it accepts CRLF line endings. Running
-`./build/orderbook_pool_tests` reports the 19 new cases. Two CLI checks pass
-`--runs 0` and `--frames 0` and require the error message instead of a crash.
+overflows `Price`, a level total that overflows `Quantity`, depth, modify with
+an invalid price that must keep the original order, and a counter that replaces
+global `operator new` and asserts that 50 rounds of adding, matching, modifying
+and cancelling do not allocate. They also check that every limit and market
+event consumes one id, so the cancels in a generated trace reference the order
+the book actually assigned. A differential test runs 20,000 events through
+`Book`, `ArrayBook` and `PoolBook` and compares the best prices, live orders,
+level counts, every trade and the executed volume. A second differential test
+runs 5,000 random operations with modifies through the three books and compares
+the depth, the best prices, the return values and every trade. The CSV reader
+round-trips a generated trace and rejects a bad header, a bad op, a bad side, a
+non-numeric field, a wrong field count and an empty file, and it accepts CRLF
+line endings. Running `./build/orderbook_pool_tests` reports the 20 new cases.
+Two CLI checks pass `--runs 0` and `--frames 0` and require the error message
+instead of a crash.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. Warnings
@@ -250,9 +251,9 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 3,3 veces más rápido que la versión
+Sobre un millón de eventos, `PoolBook` es 3,4 veces más rápido que la versión
 con `std::map` y 2,9 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 21,0 ns por evento. El cambio de array a pool ahorra 77,9
+`map` a array ahorra 19,9 ns por evento. El cambio de array a pool ahorra 81,4
 ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
 por cada orden. Esa era la parte que impedía que el array destacara.
 
