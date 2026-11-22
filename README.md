@@ -200,6 +200,11 @@ with threads measures the scheduler as much as the book.
 
 - No self-trade prevention, iceberg orders, hidden liquidity or auction phases.
 - No persistence and no network gateway.
+- The trade callback runs inside `add_limit`, `add_market` and `modify`. It must
+  not throw or call back into the book.
+- `Book` and `ArrayBook` allocate when an order rests. A `std::bad_alloc` during
+  that step can leave the book partially updated. `PoolBook` has no allocation
+  window after construction.
 - The synthetic generator is a Poisson-like flow, not real market data. The CSV
   format exists so real captures can be replayed later.
 - `ArrayBook` and `PoolBook` need a fixed price range. Outside it, the price is

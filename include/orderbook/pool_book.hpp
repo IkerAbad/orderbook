@@ -20,6 +20,7 @@ namespace ob {
 // capacity chosen by the caller.
 class PoolBook {
 public:
+    // Called for every fill. It must not throw or re-enter the book.
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 

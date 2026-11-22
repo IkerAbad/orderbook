@@ -17,6 +17,7 @@ namespace ob {
 // is created, and a price outside it is rejected.
 class ArrayBook {
 public:
+    // Called for every fill. It must not throw or re-enter the book.
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 

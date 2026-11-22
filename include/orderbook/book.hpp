@@ -21,6 +21,7 @@ namespace ob {
 // cancels and matches never allocate.
 class Book {
 public:
+    // Called for every fill. It must not throw or re-enter the book.
     using TradeCallback = std::function<void(const Trade&)>;
     using Depth = std::vector<std::pair<Price, Quantity>>;
 
