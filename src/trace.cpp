@@ -11,6 +11,13 @@ namespace ob {
 namespace {
 
 constexpr char kSeparator = ',';
+constexpr std::string_view kHeader = "ts_ns,op,side,price,quantity,id";
+
+void strip_cr(std::string& line) {
+    if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+    }
+}
 
 std::vector<std::string_view> split(std::string_view line, char sep) {
     std::vector<std::string_view> parts;
@@ -108,7 +115,7 @@ bool write_csv(const std::string& path, const std::vector<TraceEvent>& events) {
         return false;
     }
 
-    out << "ts_ns,op,side,price,quantity,id\n";
+    out << kHeader << '\n';
     for (const TraceEvent& e : events) {
         out << e.ts_ns << kSeparator << e.op << kSeparator
             << (e.side == Side::Buy ? 'B' : 'S') << kSeparator << e.price
@@ -125,29 +132,53 @@ std::vector<TraceEvent> read_csv(const std::string& path) {
 
     std::vector<TraceEvent> events;
     std::string line;
-    bool first = true;
+    std::size_t line_number = 0;
+
+    if (!std::getline(in, line)) {
+        throw std::runtime_error("trace is empty: " + path);
+    }
+    ++line_number;
+    strip_cr(line);
+    if (line != kHeader) {
+        throw std::runtime_error("unexpected trace header at line 1");
+    }
 
     while (std::getline(in, line)) {
-        if (first) {
-            first = false;  // header
-            continue;
-        }
+        ++line_number;
+        strip_cr(line);
         if (line.empty()) {
             continue;
         }
 
         const auto f = split(line, kSeparator);
         if (f.size() != 6) {
-            throw std::runtime_error("trace line does not have 6 fields");
+            throw std::runtime_error("trace line " + std::to_string(line_number) +
+                                     " does not have 6 fields");
         }
 
         TraceEvent e{};
-        e.ts_ns = to_number<std::uint64_t>(f[0]);
-        e.op = f[1].empty() ? '?' : f[1][0];
-        e.side = f[2] == "B" ? Side::Buy : Side::Sell;
-        e.price = to_number<Price>(f[3]);
-        e.quantity = to_number<Quantity>(f[4]);
-        e.id = to_number<OrderId>(f[5]);
+        try {
+            e.ts_ns = to_number<std::uint64_t>(f[0]);
+            e.op = f[1].empty() ? '?' : f[1][0];
+            if (e.op != 'L' && e.op != 'M' && e.op != 'C') {
+                throw std::runtime_error("unknown op");
+            }
+
+            if (f[2] == "B") {
+                e.side = Side::Buy;
+            } else if (f[2] == "S") {
+                e.side = Side::Sell;
+            } else {
+                throw std::runtime_error("unknown side");
+            }
+
+            e.price = to_number<Price>(f[3]);
+            e.quantity = to_number<Quantity>(f[4]);
+            e.id = to_number<OrderId>(f[5]);
+        } catch (const std::exception& ex) {
+            throw std::runtime_error("trace line " + std::to_string(line_number) + ": " +
+                                     ex.what());
+        }
         events.push_back(e);
     }
 

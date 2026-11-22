@@ -197,12 +197,12 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-35 cases. The original 19 stay unchanged and cover priority rules, partial
+38 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 16 new cases cover the pool: slot reuse, a middle cancel that must not break
+The 19 new cases cover the pool: slot reuse, a middle cancel that must not break
 the intrusive list, a full pool, invalid ladders, capacities and a span that
 overflows `Price`, depth, modify with an invalid price that must keep the
 original order, and a counter that replaces global `operator new` and asserts
@@ -213,9 +213,11 @@ differential test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook`
 and compares the best prices, live orders, level counts, every trade and the
 executed volume. A second differential test runs 5,000 random operations with
 modifies through the three books and compares the depth, the best prices, the
-return values and every trade. Running `./build/orderbook_pool_tests` reports
-the 16 new cases. Two CLI checks pass `--runs 0` and `--frames 0` and require
-the error message instead of a crash.
+return values and every trade. The CSV reader round-trips a generated trace and
+rejects a bad header, a bad op, a bad side, a non-numeric field, a wrong field
+count and an empty file, and it accepts CRLF line endings. Running
+`./build/orderbook_pool_tests` reports the 19 new cases. Two CLI checks pass
+`--runs 0` and `--frames 0` and require the error message instead of a crash.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, and runs them again
 under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu.
@@ -240,8 +242,8 @@ por cada orden. Esa era la parte que impedía que el array destacara.
 Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrido
 de niveles por parte de las órdenes a mercado, la semántica de `cancel` y
 `modify`, el rango del array, el pool lleno, la reutilización de huecos, la
-ausencia de reservas en régimen y una comparación diferencial entre las tres
-implementaciones con la misma carga.
+ausencia de reservas en régimen, el parser CSV y una comparación diferencial
+entre las tres implementaciones con la misma carga.
 
 ## License
 

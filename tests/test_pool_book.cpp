@@ -10,10 +10,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <new>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace {
@@ -319,6 +322,74 @@ TEST_CASE("generator ids follow every order that takes one") {
         }
     }
     CHECK(cancels > 0);
+}
+
+TEST_CASE("trace csv round-trips the generated events") {
+    ob::GeneratorOptions options{};
+    options.events = 500;
+    options.seed = 3;
+    const auto expected = ob::generate(options);
+
+    const std::string path =
+        (std::filesystem::temp_directory_path() / "ob_roundtrip.csv").string();
+    REQUIRE(ob::write_csv(path, expected));
+    const auto actual = ob::read_csv(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(actual.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        CHECK(actual[i].ts_ns == expected[i].ts_ns);
+        CHECK(actual[i].op == expected[i].op);
+        CHECK(actual[i].side == expected[i].side);
+        CHECK(actual[i].price == expected[i].price);
+        CHECK(actual[i].quantity == expected[i].quantity);
+        CHECK(actual[i].id == expected[i].id);
+    }
+}
+
+TEST_CASE("trace csv rejects malformed input") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const std::string header = "ts_ns,op,side,price,quantity,id\n";
+
+    const auto check_bad = [&](const std::string& name, const std::string& text) {
+        const std::string path = (dir / name).string();
+        {
+            std::ofstream out(path, std::ios::binary);
+            REQUIRE(out.good());
+            out << text;
+        }
+        CHECK_THROWS_AS(ob::read_csv(path), std::runtime_error);
+        std::filesystem::remove(path);
+    };
+
+    check_bad("ob_bad_header.csv", "wrong,header\n");
+    check_bad("ob_bad_fields.csv", header + "0,L,B,100,10\n");
+    check_bad("ob_bad_op.csv", header + "0,X,B,100,10,1\n");
+    check_bad("ob_bad_side.csv", header + "0,L,X,100,10,1\n");
+    check_bad("ob_bad_number.csv", header + "0,L,B,abc,10,1\n");
+    check_bad("ob_empty.csv", "");
+}
+
+TEST_CASE("trace csv accepts CRLF line endings") {
+    const std::string path =
+        (std::filesystem::temp_directory_path() / "ob_crlf.csv").string();
+    {
+        std::ofstream out(path, std::ios::binary);
+        REQUIRE(out.good());
+        out << "ts_ns,op,side,price,quantity,id\r\n"
+               "0,L,B,100,10,1\r\n"
+               "1,M,S,0,5,2\r\n";
+    }
+    const auto events = ob::read_csv(path);
+    std::filesystem::remove(path);
+
+    REQUIRE(events.size() == 2);
+    CHECK(events[0].op == 'L');
+    CHECK(events[0].side == ob::Side::Buy);
+    CHECK(events[0].id == 1);
+    CHECK(events[1].op == 'M');
+    CHECK(events[1].side == ob::Side::Sell);
+    CHECK(events[1].id == 2);
 }
 
 TEST_CASE("the three books agree on random modifies") {
