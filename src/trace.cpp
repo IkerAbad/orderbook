@@ -47,6 +47,10 @@ T to_number(std::string_view text) {
 }  // namespace
 
 std::vector<TraceEvent> generate(const GeneratorOptions& options) {
+    if (options.max_quantity == 0) {
+        throw std::invalid_argument("max_quantity must be positive");
+    }
+
     std::mt19937_64 rng(options.seed);
     std::uniform_int_distribution<int> coin(0, 99);
     std::uniform_int_distribution<int> side_pick(0, 1);

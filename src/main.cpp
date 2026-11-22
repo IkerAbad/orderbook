@@ -306,20 +306,32 @@ int main(int argc, char** argv) {
 
     try {
         for (std::size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--events" && i + 1 < args.size()) {
-                events = std::stoull(std::string(args[++i]));
-            } else if (args[i] == "--seed" && i + 1 < args.size()) {
-                seed = std::stoull(std::string(args[++i]));
-            } else if (args[i] == "--runs" && i + 1 < args.size()) {
-                runs = std::stoi(std::string(args[++i]));
-            } else if (args[i] == "--frames" && i + 1 < args.size()) {
-                frames = std::stoull(std::string(args[++i]));
-            } else if (args[i] == "--out" && i + 1 < args.size()) {
-                out = std::string(args[++i]);
-            } else if (args[i] == "--impl" && i + 1 < args.size()) {
-                impl = std::string(args[++i]);
+            const auto value = [&](std::string_view name) -> std::string {
+                if (i + 1 >= args.size()) {
+                    throw std::runtime_error(std::string(name) + " needs a value");
+                }
+                return std::string(args[++i]);
+            };
+
+            const std::string_view arg = args[i];
+            if (arg == "--events") {
+                events = std::stoull(value("--events"));
+            } else if (arg == "--seed") {
+                seed = std::stoull(value("--seed"));
+            } else if (arg == "--runs") {
+                runs = std::stoi(value("--runs"));
+            } else if (arg == "--frames") {
+                frames = std::stoull(value("--frames"));
+            } else if (arg == "--out") {
+                out = value("--out");
+            } else if (arg == "--impl") {
+                impl = value("--impl");
+            } else if (arg.starts_with("--")) {
+                throw std::runtime_error("unknown option " + std::string(arg));
             } else if (input.empty()) {
-                input = std::string(args[i]);
+                input = std::string(arg);
+            } else {
+                throw std::runtime_error("unexpected argument " + std::string(arg));
             }
         }
     } catch (const std::exception& e) {

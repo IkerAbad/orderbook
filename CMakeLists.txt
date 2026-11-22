@@ -64,6 +64,16 @@ if(BUILD_TESTING)
     COMMAND orderbook bench --events 10 --seed 1 --runs 0 --impl all)
   set_tests_properties(cli_zero_runs PROPERTIES
     PASS_REGULAR_EXPRESSION "--runs must be at least 1")
+
+  add_test(NAME cli_missing_value
+    COMMAND orderbook bench --events)
+  set_tests_properties(cli_missing_value PROPERTIES
+    PASS_REGULAR_EXPRESSION "--events needs a value")
+
+  add_test(NAME cli_unknown_option
+    COMMAND orderbook bench --nope)
+  set_tests_properties(cli_unknown_option PROPERTIES
+    PASS_REGULAR_EXPRESSION "unknown option --nope")
 endif()
 
 install(TARGETS orderbook_core

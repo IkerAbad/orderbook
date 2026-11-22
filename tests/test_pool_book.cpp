@@ -346,6 +346,13 @@ TEST_CASE("generator ids follow every order that takes one") {
     CHECK(cancels > 0);
 }
 
+TEST_CASE("generator rejects a zero maximum quantity") {
+    ob::GeneratorOptions options{};
+    options.events = 10;
+    options.max_quantity = 0;
+    CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
+}
+
 TEST_CASE("trace csv round-trips the generated events") {
     ob::GeneratorOptions options{};
     options.events = 500;

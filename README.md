@@ -218,12 +218,12 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-39 cases. The original 19 stay unchanged and cover priority rules, partial
+40 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 20 new cases cover the pool: slot reuse, a middle cancel that must not break
+The 21 new cases cover the pool: slot reuse, a middle cancel that must not break
 the intrusive list, a full pool, invalid ladders, capacities and a span that
 overflows `Price`, a level total that overflows `Quantity`, depth, modify with
 an invalid price that must keep the original order, and a counter that replaces
@@ -237,9 +237,9 @@ runs 5,000 random operations with modifies through the three books and compares
 the depth, the best prices, the return values and every trade. The CSV reader
 round-trips a generated trace and rejects a bad header, a bad op, a bad side, a
 non-numeric field, a wrong field count and an empty file, and it accepts CRLF
-line endings. Running `./build/orderbook_pool_tests` reports the 20 new cases.
-Two CLI checks pass `--runs 0` and `--frames 0` and require the error message
-instead of a crash.
+line endings. Running `./build/orderbook_pool_tests` reports the 21 new cases.
+Four CLI checks reject zero runs, zero frames, a missing option value and an
+unknown option with a message instead of a crash.
 
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. Warnings
