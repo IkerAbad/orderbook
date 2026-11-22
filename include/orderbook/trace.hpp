@@ -16,7 +16,7 @@ struct TraceEvent {
     Side side{};
     Price price{};
     Quantity quantity{};
-    OrderId id{};  // only used by cancels
+    OrderId id{};  // order id for L and M, referenced by C
 };
 
 struct GeneratorOptions {

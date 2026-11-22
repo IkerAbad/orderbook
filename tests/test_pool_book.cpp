@@ -300,6 +300,26 @@ TEST_CASE("pool book does not allocate while it runs") {
     CHECK(after_probe > measured);
 }
 
+TEST_CASE("generator ids follow every order that takes one") {
+    ob::GeneratorOptions options{};
+    options.events = 2'000;
+    options.seed = 5;
+    const auto trace = ob::generate(options);
+
+    ob::OrderId next = 1;
+    std::size_t cancels = 0;
+    for (const ob::TraceEvent& e : trace) {
+        if (e.op == 'L' || e.op == 'M') {
+            CHECK(e.id == next);
+            ++next;
+        } else if (e.op == 'C') {
+            ++cancels;
+            CHECK(e.id < next);
+        }
+    }
+    CHECK(cancels > 0);
+}
+
 TEST_CASE("the three books agree on a random workload") {
     ob::GeneratorOptions options{};
     options.events = 20'000;

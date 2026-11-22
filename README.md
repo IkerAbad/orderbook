@@ -39,16 +39,16 @@ probe cluster, so lookups keep working without tombstones.
 ```
 $ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 workload  1000000 events, seed 42, ladder [9809, 10339]
-map    136.265 ns/event   7338647 events/s   469797 trades
-array  116.134 ns/event   8610757 events/s   469797 trades
-pool    43.9837 ns/event   22735695 events/s   469797 trades
+map    141.048 ns/event   7089800 events/s   457777 trades
+array  120.061 ns/event   8329099 events/s   457777 trades
+pool    42.1251 ns/event   23738816 events/s   457777 trades
 ```
 
 Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
-single thread, best of three runs. On this run `PoolBook` is 3.1 times faster
-than `Book` and 2.6 times faster than `ArrayBook`. Ten consecutive runs of the
-same command gave 132.8-144.5 ns/event for `map`, 112.6-128.6 for `array` and
-42.7-56.4 for `pool`.
+single thread, best of three runs. On this run `PoolBook` is 3.3 times faster
+than `Book` and 2.9 times faster than `ArrayBook`. Ten consecutive runs of the
+same command gave 138.9-154.5 ns/event for `map`, 118.3-134.9 for `array` and
+41.7-53.3 for `pool`.
 
 The workload comes from the same binary:
 
@@ -58,23 +58,24 @@ wrote 1000000 events to trace.csv (650012 limit, 199987 cancel, 150001 market)
 ```
 
 The generator draws 65 % limit orders, 20 % cancels and 15 % market orders. It
-tracks the ids it has added and cancelled, not the ones the book has filled, so
-some cancel events reference orders that already executed and the book rejects
-them. The rare event where the generator has no id left becomes a market order,
-which explains the small drift from the exact percentages.
+assigns an id to every limit and market order, so the cancel ids stay aligned
+with the book. It does not know which orders the book has filled, so some cancel
+events reference orders that already executed and the book rejects them. The
+rare event where the generator has no id left becomes a market order, which
+explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 20.1 ns/event, 14.8 % of the map time. Price-level
+- `map` to `array` saves 21.0 ns/event, 14.9 % of the map time. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 72.2 ns/event, 62.1 % of the array time. A resting
+- `array` to `pool` saves 77.9 ns/event, 64.9 % of the array time. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
-- The second change is about 3.6 times larger than the first. That is the
+- The second change is about 3.7 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
   paid the per-order allocation, and 65 % of the events are limit orders.
-- The remaining 44 ns/event are the match loop, the callback, the trade
+- The remaining 42 ns/event are the match loop, the callback, the trade
   counters, the id hash and ordinary branch and cache misses. This build does
   not profile them further.
 
@@ -196,19 +197,21 @@ with threads measures the scheduler as much as the book.
 
 ## Tests
 
-33 cases. The original 19 stay unchanged and cover priority rules, partial
+34 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 14 new cases cover the pool: slot reuse, a middle cancel that must not break
+The 15 new cases cover the pool: slot reuse, a middle cancel that must not break
 the intrusive list, a full pool, invalid ladders, capacities and a span that
 overflows `Price`, depth, modify with an invalid price that must keep the
 original order, and a counter that replaces global `operator new` and asserts
-that 50 rounds of adding, matching, modifying and cancelling do not allocate. A
+that 50 rounds of adding, matching, modifying and cancelling do not allocate.
+They also check that every limit and market event consumes one id, so the
+cancels in a generated trace reference the order the book actually assigned. A
 differential test runs 20,000 events through `Book`, `ArrayBook` and `PoolBook`
 and compares the best prices, live orders, level counts, every trade and the
-executed volume. Running `./build/orderbook_pool_tests` reports the 14 new
+executed volume. Running `./build/orderbook_pool_tests` reports the 15 new
 cases. Two CLI checks pass `--runs 0` and `--frames 0` and require the error
 message instead of a crash.
 
@@ -226,9 +229,9 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 3,1 veces más rápido que la versión
-con `std::map` y 2,6 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 20,1 ns por evento. El cambio de array a pool ahorra 72,2
+Sobre un millón de eventos, `PoolBook` es 3,3 veces más rápido que la versión
+con `std::map` y 2,9 veces más rápido que la versión con array. El cambio de
+`map` a array ahorra 21,0 ns por evento. El cambio de array a pool ahorra 77,9
 ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
 por cada orden. Esa era la parte que impedía que el array destacara.
 

@@ -93,6 +93,7 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
             event.op = 'M';
             event.price = 0;
             event.quantity = size(rng);
+            event.id = next_id++;
         }
 
         events.push_back(event);
