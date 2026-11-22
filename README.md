@@ -34,6 +34,27 @@ The id lookup is preallocated too: an open-addressing table with linear probing,
 sized when the book is created. Removing an order reinserts the rest of its
 probe cluster, so lookups keep working without tombstones.
 
+### Complexity
+
+`L` is the number of price levels, `R` the ladder size and `k` the requested
+depth. The fills term is the number of makers touched by a match. Cancel is
+average O(1) in all three because ids go through a hash table. The difference is
+what happens when a level empties.
+
+| Operation | `Book` | `ArrayBook` | `PoolBook` |
+|---|---|---|---|
+| `add_limit` | O(fills + log L) | O(fills) | O(fills) |
+| `add_market` | O(fills) | O(fills) | O(fills) |
+| `cancel` | average O(1), O(log L) if the level empties | average O(1), O(R) if the best level empties | average O(1), O(R) if the best level empties |
+| `modify` | O(1) in place, O(fills + log L) if it moves | O(1) in place, O(fills) if it moves | O(1) in place, O(fills) if it moves |
+| `best_bid` / `best_ask` | O(1) | O(1) | O(1) |
+| `quantity_at` | O(log L) | O(1) | O(1) |
+| `depth(k)` | O(k) | O(R) | O(R) |
+| `level_count` | O(1) | O(R) | O(R) |
+
+`PoolBook` does not allocate in `add_limit`, `add_market`, `cancel` or `modify`
+after construction. `depth` allocates its result vector.
+
 ## Benchmark
 
 ```
@@ -212,6 +233,16 @@ target_link_libraries(app PRIVATE orderbook::orderbook_core)
 
 Set `-DBUILD_TESTING=OFF` to skip the tests when the project is included as a
 subdirectory or packaged.
+
+## Project layout
+
+```
+include/orderbook/  public headers
+src/                library sources and the CLI
+tests/              doctest suites, reference model and header self-checks
+fuzz/               libFuzzer targets and seed corpora
+tools/              depth visualizer
+```
 
 ## Design decisions
 
