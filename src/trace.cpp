@@ -2,6 +2,8 @@
 
 #include <charconv>
 #include <fstream>
+#include <iterator>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string_view>
@@ -12,12 +14,6 @@ namespace {
 
 constexpr char kSeparator = ',';
 constexpr std::string_view kHeader = "ts_ns,op,side,price,quantity,id";
-
-void strip_cr(std::string& line) {
-    if (!line.empty() && line.back() == '\r') {
-        line.pop_back();
-    }
-}
 
 std::vector<std::string_view> split(std::string_view line, char sep) {
     std::vector<std::string_view> parts;
@@ -128,33 +124,41 @@ bool write_csv(const std::string& path, const std::vector<TraceEvent>& events) {
     return static_cast<bool>(out);
 }
 
-std::vector<TraceEvent> read_csv(const std::string& path) {
-    std::ifstream in(path);
-    if (!in) {
-        throw std::runtime_error("cannot open trace: " + path);
-    }
-
+std::vector<TraceEvent> parse_csv(std::string_view text) {
     std::vector<TraceEvent> events;
-    std::string line;
+    std::size_t pos = 0;
     std::size_t line_number = 0;
 
-    if (!std::getline(in, line)) {
-        throw std::runtime_error("trace is empty: " + path);
+    const auto next_line = [&]() -> std::optional<std::string_view> {
+        if (pos >= text.size()) {
+            return std::nullopt;
+        }
+        const std::size_t end = text.find('\n', pos);
+        std::string_view line =
+            end == std::string_view::npos ? text.substr(pos) : text.substr(pos, end - pos);
+        pos = end == std::string_view::npos ? text.size() : end + 1;
+        if (!line.empty() && line.back() == '\r') {
+            line.remove_suffix(1);
+        }
+        return line;
+    };
+
+    const auto header = next_line();
+    if (!header) {
+        throw std::runtime_error("trace is empty");
     }
     ++line_number;
-    strip_cr(line);
-    if (line != kHeader) {
+    if (*header != kHeader) {
         throw std::runtime_error("unexpected trace header at line 1");
     }
 
-    while (std::getline(in, line)) {
+    while (const auto line = next_line()) {
         ++line_number;
-        strip_cr(line);
-        if (line.empty()) {
+        if (line->empty()) {
             continue;
         }
 
-        const auto f = split(line, kSeparator);
+        const auto f = split(*line, kSeparator);
         if (f.size() != 6) {
             throw std::runtime_error("trace line " + std::to_string(line_number) +
                                      " does not have 6 fields");
@@ -187,6 +191,17 @@ std::vector<TraceEvent> read_csv(const std::string& path) {
     }
 
     return events;
+}
+
+std::vector<TraceEvent> read_csv(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open trace: " + path);
+    }
+
+    const std::string text((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    return parse_csv(text);
 }
 
 }  // namespace ob

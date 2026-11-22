@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ob {
@@ -28,6 +29,7 @@ struct GeneratorOptions {
 
 std::vector<TraceEvent> generate(const GeneratorOptions& options);
 
+std::vector<TraceEvent> parse_csv(std::string_view text);
 bool write_csv(const std::string& path, const std::vector<TraceEvent>& events);
 std::vector<TraceEvent> read_csv(const std::string& path);
 

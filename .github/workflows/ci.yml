@@ -76,3 +76,29 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          -DORDERBOOK_BUILD_FUZZERS=ON
+          -DBUILD_TESTING=OFF
+          -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Fuzz the parser
+        run: ./build/fuzz_parse_csv -max_total_time=60 -timeout=10 -print_final_stats=1 fuzz/corpus_parse
+
+      - name: Fuzz the books
+        run: ./build/fuzz_book -max_total_time=60 -timeout=10 -print_final_stats=1 fuzz/corpus_book

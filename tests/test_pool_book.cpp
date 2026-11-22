@@ -571,6 +571,26 @@ TEST_CASE("a crossing limit can rest after freeing pool slots") {
     CHECK(book.best_ask() == std::nullopt);
 }
 
+TEST_CASE("parse_csv works on a string") {
+    const auto events = ob::parse_csv(
+        "ts_ns,op,side,price,quantity,id\n"
+        "0,L,B,100,10,1\n"
+        "1,M,S,0,5,2\n");
+    REQUIRE(events.size() == 2);
+    CHECK(events[0].ts_ns == 0);
+    CHECK(events[0].op == 'L');
+    CHECK(events[0].side == ob::Side::Buy);
+    CHECK(events[0].price == 100);
+    CHECK(events[0].quantity == 10);
+    CHECK(events[0].id == 1);
+    CHECK(events[1].op == 'M');
+    CHECK(events[1].side == ob::Side::Sell);
+    CHECK(events[1].id == 2);
+
+    CHECK_THROWS_AS(ob::parse_csv(""), std::runtime_error);
+    CHECK_THROWS_AS(ob::parse_csv("wrong\n"), std::runtime_error);
+}
+
 TEST_CASE("the books and the reference model agree on random modifies") {
     constexpr ob::Price lo = 1000;
     constexpr ob::Price hi = 2000;

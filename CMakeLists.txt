@@ -76,6 +76,24 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "unknown option --nope")
 endif()
 
+option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)
+
+if(ORDERBOOK_BUILD_FUZZERS)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "ORDERBOOK_BUILD_FUZZERS requires Clang")
+  endif()
+
+  add_executable(fuzz_parse_csv fuzz/parse_csv_fuzz.cpp)
+  target_link_libraries(fuzz_parse_csv PRIVATE orderbook_core)
+  target_compile_options(fuzz_parse_csv PRIVATE -fsanitize=fuzzer)
+  target_link_options(fuzz_parse_csv PRIVATE -fsanitize=fuzzer)
+
+  add_executable(fuzz_book fuzz/book_fuzz.cpp)
+  target_link_libraries(fuzz_book PRIVATE orderbook_core)
+  target_compile_options(fuzz_book PRIVATE -fsanitize=fuzzer)
+  target_link_options(fuzz_book PRIVATE -fsanitize=fuzzer)
+endif()
+
 install(TARGETS orderbook_core
   EXPORT orderbookTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
