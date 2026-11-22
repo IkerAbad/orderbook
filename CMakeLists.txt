@@ -93,6 +93,11 @@ if(BUILD_TESTING)
     COMMAND orderbook --version)
   set_tests_properties(cli_version PROPERTIES
     PASS_REGULAR_EXPRESSION "orderbook ${PROJECT_VERSION}")
+
+  add_test(NAME cli_replay_sample
+    COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv)
+  set_tests_properties(cli_replay_sample PROPERTIES
+    PASS_REGULAR_EXPRESSION "events     6[\r\n]+trades     3[\r\n]+volume     15[\r\n]+cancels    1 / 1 found[\r\n]+resting    0 orders[\r\n]+levels     0 bid, 0 ask")
 endif()
 
 option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)
