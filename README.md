@@ -173,6 +173,10 @@ CI fails if line coverage of the library sources drops below 90 %.
 ## Use
 
 ```
+# print the version or the usage
+./build/orderbook --version
+./build/orderbook --help
+
 # write a synthetic session to CSV
 ./build/orderbook generate --events 100000 --seed 7 --out trace.csv
 
@@ -312,8 +316,8 @@ Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Four CLI checks reject zero runs, zero frames, a missing option
-value and an unknown option with a message instead of a crash.
+executed volume. Six CLI checks cover `--help`, `--version`, zero runs, zero
+frames, a missing option value and an unknown option.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public

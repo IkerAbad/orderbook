@@ -13,13 +13,19 @@
 #include <string_view>
 #include <vector>
 
+#ifndef ORDERBOOK_VERSION
+#define ORDERBOOK_VERSION "unknown"
+#endif
+
 namespace {
 
 void usage() {
     std::cout <<
-        "orderbook - limit order book and matching engine\n"
+        "orderbook " ORDERBOOK_VERSION " - limit order book and matching engine\n"
         "\n"
         "usage:\n"
+        "  orderbook --version\n"
+        "  orderbook --help\n"
         "  orderbook generate --events N --seed S --out FILE\n"
         "  orderbook replay FILE\n"
         "  orderbook bench --events N --seed S [--runs R] [--impl map|array|pool|both|all]\n"
@@ -328,6 +334,15 @@ int main(int argc, char** argv) {
     }
 
     const std::string_view command = args[0];
+
+    if (command == "--help" || command == "-h") {
+        usage();
+        return 0;
+    }
+    if (command == "--version" || command == "-v") {
+        std::cout << "orderbook " << ORDERBOOK_VERSION << '\n';
+        return 0;
+    }
 
     std::uint64_t events = 1'000'000;
     std::uint64_t seed = 42;

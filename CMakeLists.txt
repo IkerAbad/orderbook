@@ -33,6 +33,7 @@ add_library(orderbook::orderbook_core ALIAS orderbook_core)
 
 add_executable(orderbook src/main.cpp)
 target_link_libraries(orderbook PRIVATE orderbook_core)
+target_compile_definitions(orderbook PRIVATE ORDERBOOK_VERSION="${PROJECT_VERSION}")
 
 if(BUILD_TESTING)
   add_library(doctest INTERFACE)
@@ -82,6 +83,16 @@ if(BUILD_TESTING)
     COMMAND orderbook bench --nope)
   set_tests_properties(cli_unknown_option PROPERTIES
     PASS_REGULAR_EXPRESSION "unknown option --nope")
+
+  add_test(NAME cli_help
+    COMMAND orderbook --help)
+  set_tests_properties(cli_help PROPERTIES
+    PASS_REGULAR_EXPRESSION "usage:")
+
+  add_test(NAME cli_version
+    COMMAND orderbook --version)
+  set_tests_properties(cli_version PROPERTIES
+    PASS_REGULAR_EXPRESSION "orderbook ${PROJECT_VERSION}")
 endif()
 
 option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)
