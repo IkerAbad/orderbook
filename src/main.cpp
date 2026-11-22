@@ -1,10 +1,13 @@
+#include "orderbook/array_book.hpp"
 #include "orderbook/book.hpp"
 #include "orderbook/trace.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,18 +21,25 @@ void usage() {
         "usage:\n"
         "  orderbook generate --events N --seed S --out FILE\n"
         "  orderbook replay FILE\n"
-        "  orderbook bench --events N --seed S [--runs R]\n";
+        "  orderbook bench --events N --seed S [--runs R] [--impl map|array|both]\n"
+        "  orderbook depth --events N --seed S --frames K --out FILE\n";
 }
 
-double percentile(const std::vector<double>& sorted, double p) {
-    if (sorted.empty()) {
-        return 0.0;
+template <class BookT>
+void apply(BookT& book, const ob::TraceEvent& event) {
+    switch (event.op) {
+        case 'L':
+            book.add_limit(event.side, event.price, event.quantity);
+            break;
+        case 'M':
+            book.add_market(event.side, event.quantity);
+            break;
+        case 'C':
+            book.cancel(event.id);
+            break;
+        default:
+            break;
     }
-    const double idx = p * static_cast<double>(sorted.size() - 1);
-    const auto lo = static_cast<std::size_t>(idx);
-    const auto hi = std::min(lo + 1, sorted.size() - 1);
-    const double frac = idx - static_cast<double>(lo);
-    return sorted[lo] * (1.0 - frac) + sorted[hi] * frac;
 }
 
 int run_generate(std::uint64_t events, std::uint64_t seed, const std::string& out) {
@@ -61,21 +71,13 @@ int run_replay(const std::string& path) {
     std::uint64_t cancelled = 0;
 
     for (const ob::TraceEvent& e : trace) {
-        switch (e.op) {
-            case 'L':
-                book.add_limit(e.side, e.price, e.quantity);
-                break;
-            case 'M':
-                book.add_market(e.side, e.quantity);
-                break;
-            case 'C':
-                ++cancels;
-                if (book.cancel(e.id)) {
-                    ++cancelled;
-                }
-                break;
-            default:
-                break;
+        if (e.op == 'C') {
+            ++cancels;
+            if (book.cancel(e.id)) {
+                ++cancelled;
+            }
+        } else {
+            apply(book, e);
         }
     }
 
@@ -96,75 +98,152 @@ int run_replay(const std::string& path) {
     return 0;
 }
 
-int run_bench(std::uint64_t events, std::uint64_t seed, int runs) {
+struct BenchResult {
+    double ns_per_event{};
+    double events_per_second{};
+    std::uint64_t trades{};
+    std::uint64_t volume{};
+};
+
+template <class BookT, class Factory>
+BenchResult bench_impl(const std::vector<ob::TraceEvent>& trace, int runs, Factory factory) {
+    BenchResult best{};
+    bool first = true;
+
+    for (int run = 0; run < runs; ++run) {
+        std::uint64_t trades = 0;
+        std::uint64_t volume = 0;
+        auto callback = [&](const ob::Trade& t) {
+            ++trades;
+            volume += t.quantity;
+        };
+
+        BookT book = factory(callback);
+
+        const auto start = std::chrono::steady_clock::now();
+        for (const ob::TraceEvent& event : trace) {
+            apply(book, event);
+        }
+        const auto end = std::chrono::steady_clock::now();
+
+        const double total_ns =
+            std::chrono::duration<double, std::nano>(end - start).count();
+        const double ns_per_event = total_ns / static_cast<double>(trace.size());
+
+        if (first || ns_per_event < best.ns_per_event) {
+            best.ns_per_event = ns_per_event;
+            best.events_per_second = 1e9 / ns_per_event;
+            best.trades = trades;
+            best.volume = volume;
+            first = false;
+        }
+    }
+
+    return best;
+}
+
+int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::string& impl) {
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;
 
     const auto trace = ob::generate(options);
-    std::vector<double> samples;
-    samples.reserve(events);
 
-    double best_ns_per_event = 0.0;
-    std::uint64_t trades = 0;
-    std::uint64_t volume = 0;
-
-    for (int run = 0; run < runs; ++run) {
-        trades = 0;
-        volume = 0;
-        samples.clear();
-
-        ob::Book book([&](const ob::Trade& t) {
-            ++trades;
-            volume += t.quantity;
-        });
-
-        const auto total_start = std::chrono::steady_clock::now();
-
-        for (const ob::TraceEvent& e : trace) {
-            const auto start = std::chrono::steady_clock::now();
-            switch (e.op) {
-                case 'L':
-                    book.add_limit(e.side, e.price, e.quantity);
-                    break;
-                case 'M':
-                    book.add_market(e.side, e.quantity);
-                    break;
-                case 'C':
-                    book.cancel(e.id);
-                    break;
-                default:
-                    break;
-            }
-            const auto end = std::chrono::steady_clock::now();
-            samples.push_back(
-                std::chrono::duration<double, std::nano>(end - start).count());
+    ob::Price lo = 0;
+    ob::Price hi = 0;
+    bool seen = false;
+    for (const ob::TraceEvent& e : trace) {
+        if (e.op != 'L') {
+            continue;
         }
-
-        const auto total_end = std::chrono::steady_clock::now();
-        const double total_ns =
-            std::chrono::duration<double, std::nano>(total_end - total_start).count();
-        const double ns_per_event = total_ns / static_cast<double>(trace.size());
-
-        if (run == 0 || ns_per_event < best_ns_per_event) {
-            best_ns_per_event = ns_per_event;
+        if (!seen) {
+            lo = hi = e.price;
+            seen = true;
+        } else {
+            lo = std::min(lo, e.price);
+            hi = std::max(hi, e.price);
         }
-
-        std::sort(samples.begin(), samples.end());
-
-        std::cout << "run " << (run + 1) << '\n'
-                  << "  total        " << total_ns / 1'000'000.0 << " ms\n"
-                  << "  ns/event     " << ns_per_event << '\n'
-                  << "  events/s     " << 1e9 / ns_per_event << '\n'
-                  << "  p50          " << percentile(samples, 0.50) << " ns\n"
-                  << "  p99          " << percentile(samples, 0.99) << " ns\n"
-                  << "  p99.9        " << percentile(samples, 0.999) << " ns\n";
     }
 
-    std::cout << "best ns/event  " << best_ns_per_event << '\n'
-              << "best events/s  " << 1e9 / best_ns_per_event << '\n'
-              << "trades         " << trades << '\n'
-              << "volume         " << volume << '\n';
+    if (!seen) {
+        std::cerr << "the trace has no limit orders\n";
+        return 1;
+    }
+
+    lo -= 100;
+    hi += 100;
+
+    std::cout << "workload  " << trace.size() << " events, seed " << seed
+              << ", ladder [" << lo << ", " << hi << "]\n";
+
+    const bool want_map = impl == "map" || impl == "both";
+    const bool want_array = impl == "array" || impl == "both";
+    if (!want_map && !want_array) {
+        std::cerr << "--impl must be map, array or both\n";
+        return 1;
+    }
+
+    if (want_map) {
+        const BenchResult r = bench_impl<ob::Book>(
+            trace, runs, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
+        std::cout << "map    " << r.ns_per_event << " ns/event   "
+                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
+                  << r.trades << " trades\n";
+    }
+
+    if (want_array) {
+        const BenchResult r = bench_impl<ob::ArrayBook>(
+            trace, runs, [lo, hi](ob::ArrayBook::TradeCallback cb) {
+                return ob::ArrayBook(lo, hi, std::move(cb));
+            });
+        std::cout << "array  " << r.ns_per_event << " ns/event   "
+                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
+                  << r.trades << " trades\n";
+    }
+
+    return 0;
+}
+
+int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
+              const std::string& out) {
+    ob::GeneratorOptions options{};
+    options.events = events;
+    options.seed = seed;
+
+    const auto trace = ob::generate(options);
+    std::ofstream file(out);
+    if (!file) {
+        std::cerr << "cannot write " << out << '\n';
+        return 1;
+    }
+
+    file << "frame,side,rank,price,quantity\n";
+
+    ob::Book book;
+    const std::size_t total = trace.size();
+    const std::size_t step = std::max<std::size_t>(1, (total + frames - 1) / frames);
+    std::size_t frame = 0;
+
+    for (std::size_t i = 0; i < total && frame < frames; ++i) {
+        apply(book, trace[i]);
+
+        if ((i + 1) % step == 0 || i + 1 == total) {
+            const auto bids = book.depth(ob::Side::Buy, 15);
+            const auto asks = book.depth(ob::Side::Sell, 15);
+
+            for (std::size_t rank = 0; rank < bids.size(); ++rank) {
+                file << frame << ",B," << rank << ',' << bids[rank].first << ','
+                     << bids[rank].second << '\n';
+            }
+            for (std::size_t rank = 0; rank < asks.size(); ++rank) {
+                file << frame << ",S," << rank << ',' << asks[rank].first << ','
+                     << asks[rank].second << '\n';
+            }
+            ++frame;
+        }
+    }
+
+    std::cout << "wrote " << frame << " frames to " << out << '\n';
     return 0;
 }
 
@@ -182,39 +261,62 @@ int main(int argc, char** argv) {
     std::uint64_t events = 1'000'000;
     std::uint64_t seed = 42;
     int runs = 3;
+    std::size_t frames = 60;
     std::string out;
     std::string input;
+    std::string impl = "both";
 
-    for (std::size_t i = 1; i < args.size(); ++i) {
-        if (args[i] == "--events" && i + 1 < args.size()) {
-            events = std::stoull(std::string(args[++i]));
-        } else if (args[i] == "--seed" && i + 1 < args.size()) {
-            seed = std::stoull(std::string(args[++i]));
-        } else if (args[i] == "--runs" && i + 1 < args.size()) {
-            runs = std::stoi(std::string(args[++i]));
-        } else if (args[i] == "--out" && i + 1 < args.size()) {
-            out = std::string(args[++i]);
-        } else if (input.empty()) {
-            input = std::string(args[i]);
+    try {
+        for (std::size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--events" && i + 1 < args.size()) {
+                events = std::stoull(std::string(args[++i]));
+            } else if (args[i] == "--seed" && i + 1 < args.size()) {
+                seed = std::stoull(std::string(args[++i]));
+            } else if (args[i] == "--runs" && i + 1 < args.size()) {
+                runs = std::stoi(std::string(args[++i]));
+            } else if (args[i] == "--frames" && i + 1 < args.size()) {
+                frames = std::stoull(std::string(args[++i]));
+            } else if (args[i] == "--out" && i + 1 < args.size()) {
+                out = std::string(args[++i]);
+            } else if (args[i] == "--impl" && i + 1 < args.size()) {
+                impl = std::string(args[++i]);
+            } else if (input.empty()) {
+                input = std::string(args[i]);
+            }
         }
+    } catch (const std::exception& e) {
+        std::cerr << "bad argument: " << e.what() << '\n';
+        return 1;
     }
 
-    if (command == "generate") {
-        if (out.empty()) {
-            std::cerr << "--out is required\n";
-            return 1;
+    try {
+        if (command == "generate") {
+            if (out.empty()) {
+                std::cerr << "--out is required\n";
+                return 1;
+            }
+            return run_generate(events, seed, out);
         }
-        return run_generate(events, seed, out);
-    }
-    if (command == "replay") {
-        if (input.empty()) {
-            std::cerr << "a trace file is required\n";
-            return 1;
+        if (command == "replay") {
+            if (input.empty()) {
+                std::cerr << "a trace file is required\n";
+                return 1;
+            }
+            return run_replay(input);
         }
-        return run_replay(input);
-    }
-    if (command == "bench") {
-        return run_bench(events, seed, runs);
+        if (command == "bench") {
+            return run_bench(events, seed, runs, impl);
+        }
+        if (command == "depth") {
+            if (out.empty()) {
+                std::cerr << "--out is required\n";
+                return 1;
+            }
+            return run_depth(events, seed, frames, out);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "error: " << e.what() << '\n';
+        return 1;
     }
 
     usage();

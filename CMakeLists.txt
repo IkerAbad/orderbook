@@ -16,6 +16,7 @@ if(MINGW)
 endif()
 
 add_library(orderbook_core STATIC
+  src/array_book.cpp
   src/book.cpp
   src/trace.cpp
 )

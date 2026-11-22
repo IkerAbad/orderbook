@@ -8,19 +8,34 @@ Limit order book and matching engine in C++23. Price-time priority, integer
 prices, no external dependencies, and a benchmark you can reproduce on your own
 machine.
 
+![Order book depth](docs/depth.png)
+
+## Two implementations, one contract
+
+The same book is built twice: `Book` keeps price levels in a `std::map`, and
+`ArrayBook` keeps them in a contiguous array indexed by tick. Both are driven
+through the same workload of 1,000,000 events (65 % limit orders, 20 % cancels,
+15 % market orders), single thread, best of three runs.
+
 ```
-$ ./orderbook bench --events 1000000 --seed 42 --runs 3
-best ns/event  203.97
-best events/s  4,902,640
-trades         469,797
-volume         11,981,522
+$ ./orderbook bench --events 1000000 --seed 42 --runs 3 --impl both
+workload  1000000 events, seed 42, ladder [9809, 10339]
+map    138.204 ns/event   7235701 events/s   469797 trades
+array  121.934 ns/event   8201131 events/s   469797 trades
 ```
 
-Measured on a Ryzen 9 5900X, GCC 14.2, `-O3`, single thread, with a workload of
-65 % limit orders, 20 % cancels and 15 % market orders. The per-event latency
-percentiles are not published because the Windows clock ticks at 100 ns, which
-is the same order as the operation itself. The throughput figure does not suffer
-from that limit.
+Measured on a Ryzen 9 5900X, GCC 14.2, `-O3`. The array is about 12 % faster.
+
+That number is small on purpose, and the reason is the interesting part: the
+cost is dominated by allocating one `std::list` node and one `unordered_map`
+entry per resting order, which both implementations share. The array removes the
+tree walk to reach a price level, not the per-order allocation. Replacing the
+list with an index-based pool is the next step, and it is where the gap should
+become large.
+
+Per-event latency percentiles are not published because the Windows clock ticks
+at 100 ns, which is the same order as the operation itself. The throughput figure
+does not suffer from that limit.
 
 ## What it does
 
@@ -33,6 +48,7 @@ from that limit.
   loses time priority, a size decrease keeps it.
 - Trades always execute at the resting order's price. The maker decides.
 - Deterministic: the same seed produces the same trace and the same book.
+- A depth export that feeds the plot above.
 
 ## Build
 
@@ -54,8 +70,12 @@ ctest --test-dir build --output-on-failure
 # replay it and print the final state of the book
 ./build/orderbook replay trace.csv
 
-# benchmark
-./build/orderbook bench --events 1000000 --seed 42 --runs 3
+# compare both implementations
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl both
+
+# export depth snapshots for the plot
+./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
+python tools/visualize.py --input depth.csv --png docs/depth.png --gif docs/depth.gif
 ```
 
 As a library:
@@ -69,6 +89,12 @@ ob::Book book([](const ob::Trade& t) {
 
 book.add_limit(ob::Side::Buy, 10000, 25);   // rests at 10000
 book.add_limit(ob::Side::Sell, 10000, 10);  // fills 10 at 10000
+```
+
+`ArrayBook` takes the price ladder range in its constructor:
+
+```cpp
+ob::ArrayBook book(9900, 10100, on_trade);
 ```
 
 ## Design decisions
@@ -85,38 +111,46 @@ the opposite of what a naive implementation does.
 `Location` holds the level and a `std::list` iterator. Removing an order is a
 list erase plus a map erase, with no search.
 
-**Insert allocates, the hot path does not.** Levels are `std::map` nodes and the
-index is an `unordered_map`, so the first touch of a price allocates. Matching a
-resting order never does.
+**Insert allocates, the hot path does not.** Resting an order allocates a list
+node and an index entry. Matching a resting order never does.
 
 **One thread.** Determinism is worth more than parallelism here. A benchmark
 with threads measures the scheduler as much as the book.
 
 ## Limitations
 
-These are deliberate, and each one is the next step rather than an oversight.
-
-- `std::map` gives O(log n) access to the best price. A production engine uses an
-  array indexed by tick, which is O(1) and cache-friendly. That comparison is
-  the next milestone.
 - No self-trade prevention, iceberg orders, hidden liquidity or auction phases.
 - No persistence and no network gateway.
 - The synthetic generator is a Poisson-like flow, not real market data. The CSV
   format exists so real captures can be replayed later.
+- `ArrayBook` needs a fixed price range. Outside it, the price is rejected.
+- The per-order allocation is still there. A pool of orders with integer indices
+  instead of pointers is the next improvement, and the one that should separate
+  the two implementations by a wide margin.
 
 ## Tests
 
-15 cases covering priority rules, partial fills, market orders walking several
+20 cases covering priority rules, partial fills, market orders walking several
 levels, cancel and modify semantics, the spread invariant under a random
-workload, and trace reproducibility. CI runs them on Linux and Windows.
+workload, trace reproducibility, the array ladder range, and a differential test
+that runs the same 20,000-event workload through both books and compares the
+best prices, the resting orders and the executed volume. CI runs them on Linux
+and Windows.
 
 ## Español
 
 Libro de órdenes y motor de matching en C++23, con prioridad precio-tiempo,
-precios enteros y benchmark reproducible. Sin dependencias externas. Los tests
-cubren las reglas de prioridad, las ejecuciones parciales, el recorrido de
-niveles por parte de las órdenes a mercado, la semántica de `cancel` y `modify`,
-y la reproducibilidad con la misma semilla.
+precios enteros y benchmark reproducible. Sin dependencias externas.
+
+Hay dos implementaciones del mismo contrato: una con niveles en `std::map` y otra
+con un array contiguo indexado por tick. Sobre un millón de eventos, la segunda
+es un 12 % más rápida. La diferencia es pequeña porque el coste dominante es la
+reserva de memoria por orden, que ambas comparten.
+
+Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrido
+de niveles por parte de las órdenes a mercado, la semántica de `cancel` y
+`modify`, el rango del array y una comparación diferencial entre las dos
+implementaciones con la misma carga.
 
 ## License
 

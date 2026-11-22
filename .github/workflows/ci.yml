@@ -32,3 +32,6 @@ jobs:
           if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
           "$exe" generate --events 20000 --seed 1 --out trace.csv
           "$exe" replay trace.csv
+          "$exe" bench --events 100000 --seed 1 --runs 1 --impl both
+          "$exe" depth --events 20000 --seed 1 --frames 5 --out depth.csv
+          test -s depth.csv

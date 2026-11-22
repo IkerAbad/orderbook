@@ -1,9 +1,13 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include "orderbook/array_book.hpp"
 #include "orderbook/book.hpp"
 #include "orderbook/trace.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -14,6 +18,23 @@ struct Tape {
 
     Tape() : book([this](const ob::Trade& t) { trades.push_back(t); }) {}
 };
+
+template <class BookT>
+void apply(BookT& book, const ob::TraceEvent& e) {
+    switch (e.op) {
+        case 'L':
+            book.add_limit(e.side, e.price, e.quantity);
+            break;
+        case 'M':
+            book.add_market(e.side, e.quantity);
+            break;
+        case 'C':
+            book.cancel(e.id);
+            break;
+        default:
+            break;
+    }
+}
 
 }  // namespace
 
@@ -204,3 +225,91 @@ TEST_CASE("the same seed produces the same trace") {
         CHECK(a[i].quantity == b[i].quantity);
     }
 }
+
+TEST_CASE("array book rejects prices outside its ladder") {
+    ob::ArrayBook book(100, 200);
+
+    CHECK_THROWS_AS(book.add_limit(ob::Side::Buy, 99, 1), std::out_of_range);
+    CHECK_THROWS_AS(book.add_limit(ob::Side::Sell, 201, 1), std::out_of_range);
+    CHECK(book.order_count() == 0);
+}
+
+TEST_CASE("array book advances past emptied levels") {
+    ob::ArrayBook book(100, 200);
+    book.add_limit(ob::Side::Buy, 105, 5);
+    book.add_limit(ob::Side::Buy, 103, 5);
+
+    CHECK(book.best_bid() == 105);
+    CHECK(book.add_market(ob::Side::Sell, 5) == 5);
+    CHECK(book.best_bid() == 103);
+    CHECK(book.add_market(ob::Side::Sell, 5) == 5);
+    CHECK(book.best_bid() == std::nullopt);
+}
+
+TEST_CASE("array book keeps the best price after a cancel") {
+    ob::ArrayBook book(100, 200);
+    const ob::OrderId top = book.add_limit(ob::Side::Buy, 110, 5);
+    book.add_limit(ob::Side::Buy, 108, 5);
+
+    CHECK(book.cancel(top));
+    CHECK(book.best_bid() == 108);
+}
+
+TEST_CASE("array book and map book agree on a random workload") {
+    ob::GeneratorOptions options{};
+    options.events = 20'000;
+    options.seed = 11;
+    const auto trace = ob::generate(options);
+
+    ob::Price lo = 0;
+    ob::Price hi = 0;
+    bool seen = false;
+    for (const ob::TraceEvent& e : trace) {
+        if (e.op != 'L') {
+            continue;
+        }
+        if (!seen) {
+            lo = hi = e.price;
+            seen = true;
+        } else {
+            lo = std::min(lo, e.price);
+            hi = std::max(hi, e.price);
+        }
+    }
+    REQUIRE(seen);
+    lo -= 50;
+    hi += 50;
+
+    std::uint64_t trades_map = 0;
+    std::uint64_t volume_map = 0;
+    std::uint64_t trades_array = 0;
+    std::uint64_t volume_array = 0;
+
+    ob::Book map_book([&](const ob::Trade& t) {
+        ++trades_map;
+        volume_map += t.quantity;
+    });
+    ob::ArrayBook array_book(lo, hi, [&](const ob::Trade& t) {
+        ++trades_array;
+        volume_array += t.quantity;
+    });
+
+    std::size_t checked = 0;
+    for (std::size_t i = 0; i < trace.size(); ++i) {
+        apply(map_book, trace[i]);
+        apply(array_book, trace[i]);
+
+        if (i % 500 == 0) {
+            CHECK(map_book.order_count() == array_book.order_count());
+            CHECK(map_book.best_bid() == array_book.best_bid());
+            CHECK(map_book.best_ask() == array_book.best_ask());
+            ++checked;
+        }
+    }
+
+    CHECK(checked > 0);
+    CHECK(trades_map == trades_array);
+    CHECK(volume_map == volume_array);
+    CHECK(map_book.order_count() == array_book.order_count());
+}
+
