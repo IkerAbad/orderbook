@@ -8,7 +8,7 @@ Limit order book and matching engine in C++23. Price-time priority, integer
 prices, no external dependencies, and a benchmark you can reproduce on your own
 machine.
 
-![Order book depth](docs/depth.png)
+![Order book depth](docs/depth.gif)
 
 ## Two implementations, one contract
 
