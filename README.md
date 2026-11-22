@@ -273,6 +273,10 @@ compare best prices, live orders, level counts, depth, every trade and the
 executed volume. Four CLI checks reject zero runs, zero frames, a missing option
 value and an unknown option with a message instead of a crash.
 
+An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
+`pool_book.hpp` and `trace.hpp` in separate translation units, so every public
+header must stand on its own.
+
 CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
 Clang also build with `-Wconversion` and `-Wsign-conversion`. Warnings are errors

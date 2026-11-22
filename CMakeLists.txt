@@ -47,6 +47,14 @@ if(BUILD_TESTING)
   target_link_libraries(orderbook_pool_tests PRIVATE orderbook_core doctest::doctest)
   add_test(NAME pool COMMAND orderbook_pool_tests)
 
+  add_library(orderbook_headers OBJECT
+    tests/headers/types.cpp
+    tests/headers/book.cpp
+    tests/headers/array_book.cpp
+    tests/headers/pool_book.cpp
+    tests/headers/trace.cpp)
+  target_link_libraries(orderbook_headers PRIVATE orderbook_core)
+
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # doctest 2.4.11 includes <ciso646> for Clang, which emits a #warning
     # under C++20 and later with libstdc++ 15.
