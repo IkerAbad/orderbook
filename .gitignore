@@ -1,0 +1,11 @@
+build/
+out/
+*.exe
+*.obj
+*.o
+*.pdb
+.vs/
+.vscode/
+venv/
+__pycache__/
+data/*.csv

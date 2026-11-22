@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Generate a trace and replay it
+        shell: bash
+        run: |
+          exe=./build/orderbook
+          if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+          "$exe" generate --events 20000 --seed 1 --out trace.csv
+          "$exe" replay trace.csv
