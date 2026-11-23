@@ -2,7 +2,6 @@
 
 #include <charconv>
 #include <fstream>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <random>
@@ -39,6 +38,57 @@ T to_number(std::string_view text) {
         throw std::runtime_error("malformed trace field");
     }
     return value;
+}
+
+void strip_cr(std::string& line) {
+    if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+    }
+}
+
+void check_header(std::string_view line) {
+    if (line.size() >= 3 &&
+        static_cast<unsigned char>(line[0]) == 0xEF &&
+        static_cast<unsigned char>(line[1]) == 0xBB &&
+        static_cast<unsigned char>(line[2]) == 0xBF) {
+        line.remove_prefix(3);
+    }
+    if (line != kHeader) {
+        throw std::runtime_error("unexpected trace header at line 1");
+    }
+}
+
+TraceEvent parse_event(std::string_view line, std::size_t line_number) {
+    const auto f = split(line, kSeparator);
+    if (f.size() != 6) {
+        throw std::runtime_error("trace line " + std::to_string(line_number) +
+                                 " does not have 6 fields");
+    }
+
+    TraceEvent e{};
+    try {
+        e.ts_ns = to_number<std::uint64_t>(f[0]);
+        e.op = f[1].empty() ? '?' : f[1][0];
+        if (e.op != 'L' && e.op != 'M' && e.op != 'C') {
+            throw std::runtime_error("unknown op");
+        }
+
+        if (f[2] == "B") {
+            e.side = Side::Buy;
+        } else if (f[2] == "S") {
+            e.side = Side::Sell;
+        } else {
+            throw std::runtime_error("unknown side");
+        }
+
+        e.price = to_number<Price>(f[3]);
+        e.quantity = to_number<Quantity>(f[4]);
+        e.id = to_number<OrderId>(f[5]);
+    } catch (const std::exception& ex) {
+        throw std::runtime_error("trace line " + std::to_string(line_number) + ": " +
+                                 ex.what());
+    }
+    return e;
 }
 
 }  // namespace
@@ -170,68 +220,50 @@ std::vector<TraceEvent> parse_csv(std::string_view text) {
         throw std::runtime_error("trace is empty");
     }
     ++line_number;
-
-    std::string_view header_line = *header;
-    if (header_line.size() >= 3 &&
-        static_cast<unsigned char>(header_line[0]) == 0xEF &&
-        static_cast<unsigned char>(header_line[1]) == 0xBB &&
-        static_cast<unsigned char>(header_line[2]) == 0xBF) {
-        header_line.remove_prefix(3);
-    }
-    if (header_line != kHeader) {
-        throw std::runtime_error("unexpected trace header at line 1");
-    }
+    check_header(*header);
 
     while (const auto line = next_line()) {
         ++line_number;
         if (line->empty()) {
             continue;
         }
-
-        const auto f = split(*line, kSeparator);
-        if (f.size() != 6) {
-            throw std::runtime_error("trace line " + std::to_string(line_number) +
-                                     " does not have 6 fields");
-        }
-
-        TraceEvent e{};
-        try {
-            e.ts_ns = to_number<std::uint64_t>(f[0]);
-            e.op = f[1].empty() ? '?' : f[1][0];
-            if (e.op != 'L' && e.op != 'M' && e.op != 'C') {
-                throw std::runtime_error("unknown op");
-            }
-
-            if (f[2] == "B") {
-                e.side = Side::Buy;
-            } else if (f[2] == "S") {
-                e.side = Side::Sell;
-            } else {
-                throw std::runtime_error("unknown side");
-            }
-
-            e.price = to_number<Price>(f[3]);
-            e.quantity = to_number<Quantity>(f[4]);
-            e.id = to_number<OrderId>(f[5]);
-        } catch (const std::exception& ex) {
-            throw std::runtime_error("trace line " + std::to_string(line_number) + ": " +
-                                     ex.what());
-        }
-        events.push_back(e);
+        events.push_back(parse_event(*line, line_number));
     }
 
     return events;
 }
 
-std::vector<TraceEvent> read_csv(const std::string& path) {
+void read_csv_stream(const std::string& path,
+                     const std::function<void(const TraceEvent&)>& callback) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         throw std::runtime_error("cannot open trace: " + path);
     }
 
-    const std::string text((std::istreambuf_iterator<char>(in)),
-                           std::istreambuf_iterator<char>());
-    return parse_csv(text);
+    std::string line;
+    std::size_t line_number = 0;
+
+    if (!std::getline(in, line)) {
+        throw std::runtime_error("trace is empty: " + path);
+    }
+    ++line_number;
+    strip_cr(line);
+    check_header(line);
+
+    while (std::getline(in, line)) {
+        ++line_number;
+        strip_cr(line);
+        if (line.empty()) {
+            continue;
+        }
+        callback(parse_event(line, line_number));
+    }
+}
+
+std::vector<TraceEvent> read_csv(const std::string& path) {
+    std::vector<TraceEvent> events;
+    read_csv_stream(path, [&](const TraceEvent& e) { events.push_back(e); });
+    return events;
 }
 
 }  // namespace ob

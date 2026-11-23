@@ -149,6 +149,24 @@ order, which explains the small drift from the exact percentages.
 - Deterministic: the same seed produces the same trace and the same book.
 - A depth export that feeds the plot above.
 
+## Contract
+
+Every book exposes the same methods:
+
+| Method | Result |
+|---|---|
+| `add_limit(side, price, quantity)` | order id, after matching any crossing quantity |
+| `add_market(side, quantity)` | executed quantity |
+| `cancel(id)` | `true` if the order was resting |
+| `modify(id, price, quantity)` | `true` if the order existed, zero quantity cancels |
+| `best_bid()` / `best_ask()` | optional best price |
+| `quantity_at(side, price)` | resting quantity at one price |
+| `depth(side, levels)` | best prices and quantities, up to `levels` |
+| `order_count()` / `level_count(side)` | live orders / non-empty levels |
+
+`ArrayBook` and `PoolBook` add `min_price()` and `max_price()`. `PoolBook`
+adds `capacity()` and `memory_bytes()`.
+
 ## Build
 
 Requires CMake 3.25+ and a compiler with C++23 support (GCC 14, Clang 18,
@@ -233,6 +251,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # replay through every implementation and check they agree
 ./build/orderbook replay trace.csv --impl all
 
+# summarize a recorded trace
+./build/orderbook stats trace.csv
+
 # compare the three implementations
 ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 
@@ -276,6 +297,8 @@ ob::PoolBook pool_book(9900, 10100, 500000, on_trade);
 
 Both fixed-ladder books expose `min_price()` and `max_price()`. The
 `ORDERBOOK_VERSION_*` macros are in `<orderbook/version.hpp>`.
+`ob::read_csv_stream(path, callback)` visits a trace event by event without
+storing it.
 
 A price outside the ladder throws `std::out_of_range`. If the remainder of an
 order would need a slot and the pool is full, `add_limit` throws
@@ -382,12 +405,12 @@ noexcept.
 
 ## Tests
 
-56 cases. The original 19 stay unchanged and cover priority rules, partial
+57 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 37 new cases cover the pool and the edges around it: slot reuse, a middle
+The 38 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, 1000 full pool cycles, a full
 pool, invalid ladders and capacities, spans that overflow `Price`, level totals
 that overflow `Quantity`, depth, empty books, zero-depth queries, zero-size
@@ -398,25 +421,25 @@ that leaves no room for the drift, a generator workload weight check, and a
 counter that replaces global `operator new` and asserts that 50 rounds of
 adding, matching, modifying and cancelling do not allocate. They also check that
 every limit and market event consumes one id, so the cancels in a generated
-trace reference the order the book actually assigned, and that `parse_csv` works
-without a file. The CSV reader round-trips a generated trace and rejects a bad
-header, a bad op, a bad side, a non-numeric field, a wrong field count and an
-empty file, it reports missing paths, it accepts header-only files, CRLF line
-endings and a UTF-8 BOM. Running `./build/orderbook_pool_tests` reports the 37
-new cases.
+trace reference the order the book actually assigned, that `parse_csv` works
+without a file, and that `read_csv_stream` visits every event. The CSV reader
+round-trips a generated trace and rejects a bad header, a bad op, a bad side, a
+non-numeric field, a wrong field count and an empty file, it reports missing
+paths, it accepts header-only files, CRLF line endings and a UTF-8 BOM. Running
+`./build/orderbook_pool_tests` reports the 38 new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Twenty-four CLI checks cover `--help`, `--version`, a
-reproducible generate run, a golden replay through map, array and pool, a depth
-run through all implementations, a byte-for-byte map/pool depth comparison, the
-four benchmark `--impl` modes, the workload mix, a zero depth limit, the
-invalid-argument cases, a repeat benchmark, zero repeats, a missing option value
-and an unknown option. `ctest -L unit` runs the two doctest binaries,
-`ctest -L cli` runs the command line checks and `ctest -L bench` runs the
-benchmark modes.
+executed volume. Twenty-five CLI checks cover `--help`, `--version`, a
+reproducible generate run, a trace summary, a golden replay through map, array
+and pool, a depth run through all implementations, a byte-for-byte map/pool depth
+comparison, the four benchmark `--impl` modes, the workload mix, a zero depth
+limit, the invalid-argument cases, a repeat benchmark, zero repeats, a missing
+option value and an unknown option. `ctest -L unit` runs the two doctest
+binaries, `ctest -L cli` runs the command line checks and `ctest -L bench` runs
+the benchmark modes.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public

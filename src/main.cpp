@@ -28,6 +28,7 @@ void usage() {
         "  orderbook --help\n"
         "  orderbook generate --events N --seed S [--workload mixed|limits|cancels|markets] --out FILE\n"
         "  orderbook replay FILE [--impl map|array|pool|both|all]\n"
+        "  orderbook stats FILE\n"
         "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--workload mixed|limits|cancels|markets] [--impl map|array|pool|both|all]\n"
         "  orderbook depth --events N --seed S --frames K [--levels K] [--workload mixed|limits|cancels|markets] --out FILE [--impl map|array|pool|both|all]\n";
 }
@@ -117,6 +118,7 @@ int run_generate(std::uint64_t events, std::uint64_t seed, const std::string& wo
 }
 
 struct ReplayResult {
+    std::size_t events{};
     std::uint64_t trades{};
     std::uint64_t volume{};
     std::uint64_t cancels{};
@@ -129,14 +131,15 @@ struct ReplayResult {
 };
 
 template <class BookT, class Factory>
-ReplayResult replay_once(const std::vector<ob::TraceEvent>& trace, Factory factory) {
+ReplayResult replay_file(const std::string& path, Factory factory) {
     ReplayResult result{};
     BookT book = factory([&](const ob::Trade& t) {
         ++result.trades;
         result.volume += t.quantity;
     });
 
-    for (const ob::TraceEvent& e : trace) {
+    ob::read_csv_stream(path, [&](const ob::TraceEvent& e) {
+        ++result.events;
         if (e.op == 'C') {
             ++result.cancels;
             if (book.cancel(e.id)) {
@@ -145,7 +148,7 @@ ReplayResult replay_once(const std::vector<ob::TraceEvent>& trace, Factory facto
         } else {
             apply(book, e);
         }
-    }
+    });
 
     result.resting = book.order_count();
     result.bid_levels = book.level_count(ob::Side::Buy);
@@ -156,14 +159,15 @@ ReplayResult replay_once(const std::vector<ob::TraceEvent>& trace, Factory facto
 }
 
 bool same_replay(const ReplayResult& a, const ReplayResult& b) {
-    return a.trades == b.trades && a.volume == b.volume && a.cancels == b.cancels &&
-           a.cancelled == b.cancelled && a.resting == b.resting &&
-           a.bid_levels == b.bid_levels && a.ask_levels == b.ask_levels &&
-           a.best_bid == b.best_bid && a.best_ask == b.best_ask;
+    return a.events == b.events && a.trades == b.trades && a.volume == b.volume &&
+           a.cancels == b.cancels && a.cancelled == b.cancelled &&
+           a.resting == b.resting && a.bid_levels == b.bid_levels &&
+           a.ask_levels == b.ask_levels && a.best_bid == b.best_bid &&
+           a.best_ask == b.best_ask;
 }
 
-void print_replay(const ReplayResult& r, std::size_t events) {
-    std::cout << "events     " << events << '\n'
+void print_replay(const ReplayResult& r) {
+    std::cout << "events     " << r.events << '\n'
               << "trades     " << r.trades << '\n'
               << "volume     " << r.volume << '\n'
               << "cancels    " << r.cancelled << " / " << r.cancels << " found\n"
@@ -179,7 +183,6 @@ void print_replay(const ReplayResult& r, std::size_t events) {
 }
 
 int run_replay(const std::string& path, const std::string& impl) {
-    const auto trace = ob::read_csv(path);
     const ImplSelection selection = select_impl(impl);
     if (!selection.map && !selection.array && !selection.pool) {
         std::cerr << "--impl must be map, array, pool, both or all\n";
@@ -190,26 +193,27 @@ int run_replay(const std::string& path, const std::string& impl) {
     ob::Price hi = 0;
     bool seen = false;
     std::size_t limit_events = 0;
-    for (const ob::TraceEvent& e : trace) {
-        if (e.op != 'L') {
-            continue;
-        }
-        ++limit_events;
+
+    if (selection.array || selection.pool) {
+        ob::read_csv_stream(path, [&](const ob::TraceEvent& e) {
+            if (e.op != 'L') {
+                return;
+            }
+            ++limit_events;
+            if (!seen) {
+                lo = hi = e.price;
+                seen = true;
+            } else {
+                lo = std::min(lo, e.price);
+                hi = std::max(hi, e.price);
+            }
+        });
+
         if (!seen) {
-            lo = hi = e.price;
-            seen = true;
-        } else {
-            lo = std::min(lo, e.price);
-            hi = std::max(hi, e.price);
+            std::cerr << "the trace has no limit orders\n";
+            return 1;
         }
-    }
 
-    if ((selection.array || selection.pool) && !seen) {
-        std::cerr << "the trace has no limit orders\n";
-        return 1;
-    }
-
-    if (seen) {
         lo -= 100;
         hi += 100;
     }
@@ -224,10 +228,8 @@ int run_replay(const std::string& path, const std::string& impl) {
     };
 
     if (selection.map) {
-        const ReplayResult r =
-            replay_once<ob::Book>(trace, [](ob::Book::TradeCallback cb) {
-                return ob::Book(std::move(cb));
-            });
+        const ReplayResult r = replay_file<ob::Book>(
+            path, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
         if (!check(r)) {
             std::cerr << "replay implementations disagree\n";
             return 1;
@@ -235,8 +237,8 @@ int run_replay(const std::string& path, const std::string& impl) {
     }
 
     if (selection.array) {
-        const ReplayResult r = replay_once<ob::ArrayBook>(
-            trace, [lo, hi](ob::ArrayBook::TradeCallback cb) {
+        const ReplayResult r = replay_file<ob::ArrayBook>(
+            path, [lo, hi](ob::ArrayBook::TradeCallback cb) {
                 return ob::ArrayBook(lo, hi, std::move(cb));
             });
         if (!check(r)) {
@@ -246,8 +248,8 @@ int run_replay(const std::string& path, const std::string& impl) {
     }
 
     if (selection.pool) {
-        const ReplayResult r = replay_once<ob::PoolBook>(
-            trace, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
+        const ReplayResult r = replay_file<ob::PoolBook>(
+            path, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
                 return ob::PoolBook(lo, hi, limit_events, std::move(cb));
             });
         if (!check(r)) {
@@ -256,7 +258,7 @@ int run_replay(const std::string& path, const std::string& impl) {
         }
     }
 
-    print_replay(*first, trace.size());
+    print_replay(*first);
 
     const int count = (selection.map ? 1 : 0) + (selection.array ? 1 : 0) +
                       (selection.pool ? 1 : 0);
@@ -273,6 +275,47 @@ int run_replay(const std::string& path, const std::string& impl) {
         }
     }
 
+    return 0;
+}
+
+int run_stats(const std::string& path) {
+    std::uint64_t events = 0;
+    std::uint64_t limits = 0;
+    std::uint64_t cancels = 0;
+    std::uint64_t markets = 0;
+    std::uint64_t volume = 0;
+    std::optional<ob::Price> min_price;
+    std::optional<ob::Price> max_price;
+
+    ob::read_csv_stream(path, [&](const ob::TraceEvent& e) {
+        ++events;
+        volume += e.quantity;
+        if (e.op == 'L') {
+            ++limits;
+            if (!min_price || e.price < *min_price) {
+                min_price = e.price;
+            }
+            if (!max_price || e.price > *max_price) {
+                max_price = e.price;
+            }
+        } else if (e.op == 'C') {
+            ++cancels;
+        } else if (e.op == 'M') {
+            ++markets;
+        }
+    });
+
+    std::cout << "events     " << events << '\n'
+              << "limit      " << limits << '\n'
+              << "cancel     " << cancels << '\n'
+              << "market     " << markets << '\n'
+              << "volume     " << volume << '\n';
+    if (min_price) {
+        std::cout << "min price  " << *min_price << '\n';
+    }
+    if (max_price) {
+        std::cout << "max price  " << *max_price << '\n';
+    }
     return 0;
 }
 
@@ -746,6 +789,13 @@ int main(int argc, char** argv) {
                 return 1;
             }
             return run_replay(input, impl_set ? impl : "map");
+        }
+        if (command == "stats") {
+            if (input.empty()) {
+                std::cerr << "a trace file is required\n";
+                return 1;
+            }
+            return run_stats(input);
         }
         if (command == "bench") {
             return run_bench(events, seed, runs, repeat, workload, impl);

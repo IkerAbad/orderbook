@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
-project(orderbook VERSION 0.2.0 LANGUAGES CXX)
+project(orderbook VERSION 0.2.0
+  DESCRIPTION "Limit order book and matching engine in C++23"
+  HOMEPAGE_URL "https://github.com/IkerAbad/orderbook"
+  LANGUAGES CXX)
 
 include(CTest)
 include(GNUInstallDirs)
@@ -167,6 +170,11 @@ if(BUILD_TESTING)
   set_tests_properties(replay_all PROPERTIES
     PASS_REGULAR_EXPRESSION "map, array and pool agree")
 
+  add_test(NAME cli_stats_sample
+    COMMAND orderbook stats ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv)
+  set_tests_properties(cli_stats_sample PROPERTIES
+    PASS_REGULAR_EXPRESSION "events     6[\r\n]+limit      3[\r\n]+cancel     1[\r\n]+market     2[\r\n]+volume     35[\r\n]+min price  9990[\r\n]+max price  10010")
+
   add_test(NAME depth_all
     COMMAND orderbook depth --events 100 --seed 1 --frames 2 --impl all
             --out ${CMAKE_CURRENT_BINARY_DIR}/depth_all.csv)
@@ -220,7 +228,8 @@ if(BUILD_TESTING)
     cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
     cli_missing_value cli_unknown_option cli_help cli_version
     cli_replay_sample replay_array replay_pool replay_all depth_all
-    cli_bad_workload cli_workload_limits cli_zero_levels depth_levels
+    cli_stats_sample cli_bad_workload cli_workload_limits cli_zero_levels
+    depth_levels
     PROPERTIES LABELS "cli")
   set_tests_properties(bench_map bench_array bench_pool bench_both bench_workload_limits
     PROPERTIES LABELS "cli;bench")
@@ -286,8 +295,8 @@ install(FILES
 
 set(CPACK_PACKAGE_NAME "orderbook")
 set(CPACK_PACKAGE_VENDOR "Iker Abad")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-    "Limit order book and matching engine in C++23")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_HOMEPAGE_URL "${PROJECT_HOMEPAGE_URL}")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGE_FILE_NAME
     "orderbook-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")

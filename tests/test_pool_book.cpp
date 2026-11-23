@@ -452,6 +452,31 @@ TEST_CASE("generator rejects a zero maximum quantity") {
     CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
 }
 
+TEST_CASE("read_csv_stream visits every event") {
+    const auto path =
+        (std::filesystem::temp_directory_path() / "ob_stream.csv").string();
+    {
+        std::ofstream out(path, std::ios::binary);
+        REQUIRE(out.good());
+        out << "ts_ns,op,side,price,quantity,id\n"
+               "0,L,B,100,10,1\n"
+               "1,M,S,0,5,2\n"
+               "2,C,B,0,0,1\n";
+    }
+
+    std::vector<ob::TraceEvent> events;
+    ob::read_csv_stream(path, [&](const ob::TraceEvent& e) { events.push_back(e); });
+    std::filesystem::remove(path);
+
+    REQUIRE(events.size() == 3);
+    CHECK(events[0].op == 'L');
+    CHECK(events[0].side == ob::Side::Buy);
+    CHECK(events[1].op == 'M');
+    CHECK(events[1].side == ob::Side::Sell);
+    CHECK(events[2].op == 'C');
+    CHECK(events[2].id == 1);
+}
+
 TEST_CASE("trace csv reports missing paths and header-only files") {
     const auto dir = std::filesystem::temp_directory_path();
 

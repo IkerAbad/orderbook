@@ -12,6 +12,10 @@
 - `--impl pool` and `--impl all` in the benchmark, with a fixed price ladder and
   a fixed order capacity.
 - `PoolBook::memory_bytes()` and a `pool memory` line in the benchmark.
+- `read_csv_stream` and a streaming `replay`, so large traces are not stored
+  twice.
+- `stats` command for a recorded trace.
+- CMake project description and homepage metadata, reused by CPack.
 - `orderbook/version.hpp` generated from the project version.
 - Benchmark consistency check: implementations must agree on trades and volume.
 - `parse_csv(std::string_view)` and libFuzzer targets for the parser and the
@@ -62,7 +66,7 @@
 
 ### Tests and CI
 
-- 56 doctest cases, 24 CLI checks and 26 CTest entries.
+- 57 doctest cases, 25 CLI checks and 27 CTest entries.
 - CTest labels `unit`, `cli` and `bench` for selective runs.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.
@@ -70,3 +74,12 @@
   Ubuntu, two 60-second libFuzzer runs and a 90 % line coverage gate.
 - GCC and Clang build with `-Wconversion` and `-Wsign-conversion`, GCC adds its
   extra condition, logical and cast warnings, and warnings are errors.
+
+## 0.1.0 - 2026-11-22
+
+### Added
+
+- `Book` with `std::map` price levels and `std::list` orders.
+- `ArrayBook` with a fixed price ladder.
+- `generate`, `replay`, `bench` and `depth` commands.
+- 19 doctest cases and CI on Linux and Windows.

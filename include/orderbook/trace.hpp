@@ -3,6 +3,7 @@
 #include "orderbook/types.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -35,5 +36,9 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options);
 std::vector<TraceEvent> parse_csv(std::string_view text);
 bool write_csv(const std::string& path, const std::vector<TraceEvent>& events);
 std::vector<TraceEvent> read_csv(const std::string& path);
+
+// Visits every event without storing the whole trace.
+void read_csv_stream(const std::string& path,
+                     const std::function<void(const TraceEvent&)>& callback);
 
 }  // namespace ob
