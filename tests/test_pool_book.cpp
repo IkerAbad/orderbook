@@ -604,6 +604,15 @@ TEST_CASE("a crossing limit can rest after freeing pool slots") {
     CHECK(book.best_ask() == std::nullopt);
 }
 
+TEST_CASE("generator rejects a mid that leaves no room for the drift") {
+    ob::GeneratorOptions options{};
+    options.events = 1000;
+    options.mid = std::numeric_limits<ob::Price>::max();
+    CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
+    options.mid = std::numeric_limits<ob::Price>::min();
+    CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
+}
+
 TEST_CASE("trace csv accepts a UTF-8 BOM") {
     const auto events = ob::parse_csv(
         "\xEF\xBB\xBF"

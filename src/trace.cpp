@@ -3,6 +3,7 @@
 #include <charconv>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -45,6 +46,20 @@ T to_number(std::string_view text) {
 std::vector<TraceEvent> generate(const GeneratorOptions& options) {
     if (options.max_quantity == 0) {
         throw std::invalid_argument("max_quantity must be positive");
+    }
+
+    const std::uint64_t steps = options.events / 64 + 1;
+    constexpr std::uint64_t kMargin = 50;
+    const auto max_price =
+        static_cast<std::uint64_t>(std::numeric_limits<Price>::max());
+    if (steps > max_price - kMargin) {
+        throw std::invalid_argument("too many events for the price drift");
+    }
+
+    const auto drift_bound = static_cast<Price>(steps);
+    if (options.mid > std::numeric_limits<Price>::max() - drift_bound - 50 ||
+        options.mid < std::numeric_limits<Price>::min() + drift_bound + 50) {
+        throw std::invalid_argument("mid leaves no room for the drift");
     }
 
     std::mt19937_64 rng(options.seed);

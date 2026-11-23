@@ -40,9 +40,13 @@ target_include_directories(orderbook_core PUBLIC
 target_compile_features(orderbook_core PUBLIC cxx_std_23)
 add_library(orderbook::orderbook_core ALIAS orderbook_core)
 
-add_executable(orderbook src/main.cpp)
-target_link_libraries(orderbook PRIVATE orderbook_core)
-target_compile_definitions(orderbook PRIVATE ORDERBOOK_VERSION="${PROJECT_VERSION}")
+option(ORDERBOOK_BUILD_CLI "Build the orderbook command line tool" ON)
+
+if(ORDERBOOK_BUILD_CLI)
+  add_executable(orderbook src/main.cpp)
+  target_link_libraries(orderbook PRIVATE orderbook_core)
+  target_compile_definitions(orderbook PRIVATE ORDERBOOK_VERSION="${PROJECT_VERSION}")
+endif()
 
 if(BUILD_TESTING)
   add_library(doctest INTERFACE)
@@ -72,6 +76,9 @@ if(BUILD_TESTING)
     target_compile_options(orderbook_pool_tests PRIVATE "-Wno-#warnings")
   endif()
 
+  set_tests_properties(book pool PROPERTIES LABELS "unit")
+
+  if(ORDERBOOK_BUILD_CLI)
   add_test(NAME cli_zero_frames
     COMMAND orderbook depth --events 10 --seed 1 --frames 0
             --out ${CMAKE_CURRENT_BINARY_DIR}/zero_frames.csv)
@@ -154,14 +161,27 @@ if(BUILD_TESTING)
   set_tests_properties(replay_all PROPERTIES
     PASS_REGULAR_EXPRESSION "map, array and pool agree")
 
-  set_tests_properties(book pool PROPERTIES LABELS "unit")
+  add_test(NAME depth_all
+    COMMAND orderbook depth --events 100 --seed 1 --frames 2 --impl all
+            --out ${CMAKE_CURRENT_BINARY_DIR}/depth_all.csv)
+  set_tests_properties(depth_all PROPERTIES
+    PASS_REGULAR_EXPRESSION "map, array and pool agree")
+
+  add_test(NAME depth_consistency
+    COMMAND ${CMAKE_COMMAND}
+      -DORDERBOOK=$<TARGET_FILE:orderbook>
+      -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_depth.cmake)
+  set_tests_properties(depth_consistency PROPERTIES LABELS "cli;bench")
+
   set_tests_properties(
     cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
     cli_missing_value cli_unknown_option cli_help cli_version
-    cli_replay_sample replay_array replay_pool replay_all
+    cli_replay_sample replay_array replay_pool replay_all depth_all
     PROPERTIES LABELS "cli")
   set_tests_properties(bench_map bench_array bench_pool bench_both
     PROPERTIES LABELS "cli;bench")
+  endif()
 endif()
 
 option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)
@@ -187,8 +207,10 @@ install(TARGETS orderbook_core
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(TARGETS orderbook
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(ORDERBOOK_BUILD_CLI)
+  install(TARGETS orderbook
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 install(DIRECTORY include/orderbook
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -31,7 +32,7 @@ void usage() {
         "  orderbook generate --events N --seed S --out FILE\n"
         "  orderbook replay FILE [--impl map|array|pool|both|all]\n"
         "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--impl map|array|pool|both|all]\n"
-        "  orderbook depth --events N --seed S --frames K --out FILE\n";
+        "  orderbook depth --events N --seed S --frames K --out FILE [--impl map|array|pool|both|all]\n";
 }
 
 template <class BookT>
@@ -469,27 +470,12 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
     return 0;
 }
 
-int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
-              const std::string& out) {
-    if (frames == 0) {
-        std::cerr << "--frames must be at least 1\n";
-        return 1;
-    }
+template <class BookT, class Factory>
+std::size_t write_depth(const std::vector<ob::TraceEvent>& trace, std::size_t frames,
+                        std::ostream& out, Factory factory) {
+    BookT book = factory();
+    out << "frame,side,rank,price,quantity\n";
 
-    ob::GeneratorOptions options{};
-    options.events = events;
-    options.seed = seed;
-
-    const auto trace = ob::generate(options);
-    std::ofstream file(out);
-    if (!file) {
-        std::cerr << "cannot write " << out << '\n';
-        return 1;
-    }
-
-    file << "frame,side,rank,price,quantity\n";
-
-    ob::Book book;
     const std::size_t total = trace.size();
     const std::size_t step = std::max<std::size_t>(1, (total + frames - 1) / frames);
     std::size_t frame = 0;
@@ -502,18 +488,132 @@ int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
             const auto asks = book.depth(ob::Side::Sell, 15);
 
             for (std::size_t rank = 0; rank < bids.size(); ++rank) {
-                file << frame << ",B," << rank << ',' << bids[rank].first << ','
-                     << bids[rank].second << '\n';
+                out << frame << ",B," << rank << ',' << bids[rank].first << ','
+                    << bids[rank].second << '\n';
             }
             for (std::size_t rank = 0; rank < asks.size(); ++rank) {
-                file << frame << ",S," << rank << ',' << asks[rank].first << ','
-                     << asks[rank].second << '\n';
+                out << frame << ",S," << rank << ',' << asks[rank].first << ','
+                    << asks[rank].second << '\n';
             }
             ++frame;
         }
     }
 
-    std::cout << "wrote " << frame << " frames to " << out << '\n';
+    return frame;
+}
+
+int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
+              const std::string& impl, const std::string& out) {
+    if (frames == 0) {
+        std::cerr << "--frames must be at least 1\n";
+        return 1;
+    }
+
+    ob::GeneratorOptions options{};
+    options.events = events;
+    options.seed = seed;
+
+    const auto trace = ob::generate(options);
+    const ImplSelection selection = select_impl(impl);
+    if (!selection.map && !selection.array && !selection.pool) {
+        std::cerr << "--impl must be map, array, pool, both or all\n";
+        return 1;
+    }
+
+    ob::Price lo = 0;
+    ob::Price hi = 0;
+    bool seen = false;
+    std::size_t limit_events = 0;
+    for (const ob::TraceEvent& e : trace) {
+        if (e.op != 'L') {
+            continue;
+        }
+        ++limit_events;
+        if (!seen) {
+            lo = hi = e.price;
+            seen = true;
+        } else {
+            lo = std::min(lo, e.price);
+            hi = std::max(hi, e.price);
+        }
+    }
+
+    if ((selection.array || selection.pool) && !seen) {
+        std::cerr << "the trace has no limit orders\n";
+        return 1;
+    }
+
+    if (seen) {
+        lo -= 100;
+        hi += 100;
+    }
+
+    std::ostringstream map_out;
+    std::ostringstream array_out;
+    std::ostringstream pool_out;
+    std::optional<std::string> first_output;
+    std::size_t frame_count = 0;
+
+    const auto check = [&](std::ostringstream& stream, std::size_t count) {
+        const std::string data = stream.str();
+        if (!first_output) {
+            first_output = data;
+            frame_count = count;
+            return true;
+        }
+        return *first_output == data;
+    };
+
+    if (selection.map) {
+        const std::size_t count =
+            write_depth<ob::Book>(trace, frames, map_out, [] { return ob::Book(); });
+        if (!check(map_out, count)) {
+            std::cerr << "depth implementations disagree\n";
+            return 1;
+        }
+    }
+    if (selection.array) {
+        const std::size_t count = write_depth<ob::ArrayBook>(
+            trace, frames, array_out, [lo, hi] { return ob::ArrayBook(lo, hi); });
+        if (!check(array_out, count)) {
+            std::cerr << "depth implementations disagree\n";
+            return 1;
+        }
+    }
+    if (selection.pool) {
+        const std::size_t count = write_depth<ob::PoolBook>(
+            trace, frames, pool_out,
+            [lo, hi, limit_events] { return ob::PoolBook(lo, hi, limit_events); });
+        if (!check(pool_out, count)) {
+            std::cerr << "depth implementations disagree\n";
+            return 1;
+        }
+    }
+
+    std::ofstream file(out);
+    if (!file) {
+        std::cerr << "cannot write " << out << '\n';
+        return 1;
+    }
+    file << *first_output;
+
+    std::cout << "wrote " << frame_count << " frames to " << out << '\n';
+
+    const int count = (selection.map ? 1 : 0) + (selection.array ? 1 : 0) +
+                      (selection.pool ? 1 : 0);
+    if (count > 1) {
+        std::cout << "implementations  ";
+        if (selection.map && selection.array && selection.pool) {
+            std::cout << "map, array and pool agree\n";
+        } else if (selection.map && selection.array) {
+            std::cout << "map and array agree\n";
+        } else if (selection.map && selection.pool) {
+            std::cout << "map and pool agree\n";
+        } else {
+            std::cout << "array and pool agree\n";
+        }
+    }
+
     return 0;
 }
 
@@ -608,7 +708,7 @@ int main(int argc, char** argv) {
                 std::cerr << "--out is required\n";
                 return 1;
             }
-            return run_depth(events, seed, frames, out);
+            return run_depth(events, seed, frames, impl_set ? impl : "map", out);
         }
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';

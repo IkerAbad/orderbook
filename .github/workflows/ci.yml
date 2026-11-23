@@ -51,6 +51,11 @@ jobs:
           cmake -S . -B build-min -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
           cmake --build build-min
 
+      - name: Build library only
+        run: |
+          cmake -S . -B build-lib -G Ninja -DCMAKE_BUILD_TYPE=Release -DORDERBOOK_BUILD_CLI=OFF -DBUILD_TESTING=OFF -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          cmake --build build-lib
+
       - name: Generate a trace and replay it
         shell: bash
         run: |

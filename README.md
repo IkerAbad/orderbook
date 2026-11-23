@@ -202,6 +202,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # export depth snapshots for the plot
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
 python tools/visualize.py --input depth.csv --png docs/depth.png --gif docs/depth.gif
+
+# check that every implementation produces the same depth CSV
+./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv --impl all
 ```
 
 As a library:
@@ -249,8 +252,9 @@ target_link_libraries(app PRIVATE orderbook::orderbook_core)
 ```
 
 Set `-DBUILD_TESTING=OFF` to skip the tests when the project is included as a
-subdirectory or packaged. The `examples/consumer` project is built against an
-installed tree in CI.
+subdirectory or packaged. Set `-DORDERBOOK_BUILD_CLI=OFF` to build only the
+library and skip the command line tool. The `examples/consumer` project is
+built against an installed tree in CI.
 
 ## Project layout
 
@@ -314,36 +318,38 @@ noexcept.
 
 ## Tests
 
-53 cases. The original 19 stay unchanged and cover priority rules, partial
+54 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 34 new cases cover the pool and the edges around it: slot reuse, a middle
+The 35 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, 1000 full pool cycles, a full
 pool, invalid ladders and capacities, spans that overflow `Price`, level totals
 that overflow `Quantity`, depth, empty books, zero-depth queries, zero-size
 market orders and modify no-ops, modify crossing the spread, modify fully
 executing, a crossing order that frees pool slots, the memory footprint, noexcept
-queries, move-only book semantics, a three-seed differential, and a counter that
-replaces global `operator new` and asserts that 50 rounds of adding, matching,
-modifying and cancelling do not allocate. They also check that every limit and
-market event consumes one id, so the cancels in a generated trace reference the
-order the book actually assigned, and that `parse_csv` works without a file. The
-CSV reader round-trips a generated trace and rejects a bad header, a bad op, a
-bad side, a non-numeric field, a wrong field count and an empty file, and it
-accepts CRLF line endings and a UTF-8 BOM. Running
-`./build/orderbook_pool_tests` reports the 34 new cases.
+queries, move-only book semantics, a three-seed differential, a generator `mid`
+that leaves no room for the drift, and a counter that replaces global
+`operator new` and asserts that 50 rounds of adding, matching, modifying and
+cancelling do not allocate. They also check that every limit and market event
+consumes one id, so the cancels in a generated trace reference the order the
+book actually assigned, and that `parse_csv` works without a file. The CSV
+reader round-trips a generated trace and rejects a bad header, a bad op, a bad
+side, a non-numeric field, a wrong field count and an empty file, and it accepts
+CRLF line endings and a UTF-8 BOM. Running `./build/orderbook_pool_tests`
+reports the 35 new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Sixteen CLI checks cover `--help`, `--version`, a golden replay
-through map, array and pool, the four benchmark `--impl` modes, zero runs, zero
-repeats, a repeat benchmark, zero frames, a missing option value and an unknown
-option. `ctest -L unit` runs the two doctest binaries, `ctest -L cli` runs the
-command line checks and `ctest -L bench` runs the benchmark modes.
+executed volume. Eighteen CLI checks cover `--help`, `--version`, a golden
+replay through map, array and pool, a depth run through all implementations, a
+byte-for-byte map/pool depth comparison, the four benchmark `--impl` modes, zero
+runs, zero repeats, a repeat benchmark, zero frames, a missing option value and
+an unknown option. `ctest -L unit` runs the two doctest binaries, `ctest -L cli`
+runs the command line checks and `ctest -L bench` runs the benchmark modes.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public
@@ -355,8 +361,8 @@ Clang also build with `-Wconversion` and `-Wsign-conversion`. GCC adds its
 duplicated-condition, logical-op, useless-cast and cast-qual warnings. Warnings
 are errors in every compiler job. Both build jobs also install the package, run
 the installed CLI, build `examples/consumer` against the installation and
-compile a tree with `BUILD_TESTING=OFF`. A separate job checks that line
-coverage of the library sources stays at or above 90 %.
+compile trees with `BUILD_TESTING=OFF` and `ORDERBOOK_BUILD_CLI=OFF`. A separate
+job checks that line coverage of the library sources stays at or above 90 %.
 
 ## Fuzzing
 
