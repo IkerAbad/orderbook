@@ -58,7 +58,12 @@ jobs:
         run: |
           cd build
           cpack --config CPackSourceConfig.cmake -G TGZ
-          test -f orderbook-*-Source.tar.gz
+          arc=$(ls orderbook-*-Source.tar.gz | head -n 1)
+          test -f "$arc"
+          if cmake -E tar tf "$arc" | grep -qE '(^|/)(build|install|consumer-build)/'; then
+            echo "source package contains a build directory"
+            exit 1
+          fi
 
       - name: Build without tests
         run: |
