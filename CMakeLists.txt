@@ -5,6 +5,11 @@ include(CTest)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
+configure_file(
+  cmake/version.hpp.in
+  ${CMAKE_CURRENT_BINARY_DIR}/include/orderbook/version.hpp
+  @ONLY)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -36,6 +41,7 @@ add_library(orderbook_core STATIC
 )
 target_include_directories(orderbook_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_compile_features(orderbook_core PUBLIC cxx_std_23)
 add_library(orderbook::orderbook_core ALIAS orderbook_core)
@@ -45,7 +51,6 @@ option(ORDERBOOK_BUILD_CLI "Build the orderbook command line tool" ON)
 if(ORDERBOOK_BUILD_CLI)
   add_executable(orderbook src/main.cpp)
   target_link_libraries(orderbook PRIVATE orderbook_core)
-  target_compile_definitions(orderbook PRIVATE ORDERBOOK_VERSION="${PROJECT_VERSION}")
 endif()
 
 if(BUILD_TESTING)
@@ -66,7 +71,8 @@ if(BUILD_TESTING)
     tests/headers/book.cpp
     tests/headers/array_book.cpp
     tests/headers/pool_book.cpp
-    tests/headers/trace.cpp)
+    tests/headers/trace.cpp
+    tests/headers/version.cpp)
   target_link_libraries(orderbook_headers PRIVATE orderbook_core)
 
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -205,10 +211,10 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "--levels must be at least 1")
 
   add_test(NAME depth_levels
-    COMMAND orderbook depth --events 100 --seed 1 --frames 1 --levels 3
-            --out ${CMAKE_CURRENT_BINARY_DIR}/depth_levels.csv)
-  set_tests_properties(depth_levels PROPERTIES
-    PASS_REGULAR_EXPRESSION "wrote 1 frames")
+    COMMAND ${CMAKE_COMMAND}
+      -DORDERBOOK=$<TARGET_FILE:orderbook>
+      -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_depth_levels.cmake)
 
   set_tests_properties(
     cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
@@ -251,6 +257,9 @@ endif()
 
 install(DIRECTORY include/orderbook
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/orderbook/version.hpp
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/orderbook)
 
 install(FILES LICENSE README.md CHANGELOG.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR})

@@ -39,6 +39,8 @@ public:
     [[nodiscard]] Depth depth(Side side, std::size_t levels) const;
     [[nodiscard]] std::size_t order_count() const noexcept { return index_.size(); }
     [[nodiscard]] std::size_t level_count(Side side) const noexcept;
+    [[nodiscard]] Price min_price() const noexcept { return min_price_; }
+    [[nodiscard]] Price max_price() const noexcept { return max_price_; }
 
 private:
     struct Level {

@@ -46,6 +46,8 @@ public:
     [[nodiscard]] std::size_t order_count() const noexcept { return live_; }
     [[nodiscard]] std::size_t level_count(Side side) const noexcept;
     [[nodiscard]] std::size_t capacity() const noexcept { return orders_.size(); }
+    [[nodiscard]] Price min_price() const noexcept { return min_price_; }
+    [[nodiscard]] Price max_price() const noexcept { return max_price_; }
 
     // Bytes reserved by the vectors, excluding their object overhead.
     [[nodiscard]] std::size_t memory_bytes() const noexcept;

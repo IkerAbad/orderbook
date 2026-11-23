@@ -2,6 +2,7 @@
 #include "orderbook/book.hpp"
 #include "orderbook/pool_book.hpp"
 #include "orderbook/trace.hpp"
+#include "orderbook/version.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -16,15 +17,11 @@
 #include <string_view>
 #include <vector>
 
-#ifndef ORDERBOOK_VERSION
-#define ORDERBOOK_VERSION "unknown"
-#endif
-
 namespace {
 
 void usage() {
     std::cout <<
-        "orderbook " ORDERBOOK_VERSION " - limit order book and matching engine\n"
+        "orderbook " ORDERBOOK_VERSION_STRING " - limit order book and matching engine\n"
         "\n"
         "usage:\n"
         "  orderbook --version\n"
@@ -671,7 +668,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (command == "--version" || command == "-v") {
-        std::cout << "orderbook " << ORDERBOOK_VERSION << '\n';
+        std::cout << "orderbook " << ORDERBOOK_VERSION_STRING << '\n';
         return 0;
     }
 

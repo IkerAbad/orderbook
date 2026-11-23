@@ -158,6 +158,13 @@
       }
     }
   ],
+  "packagePresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "generators": ["ZIP", "TGZ"]
+    }
+  ],
   "workflowPresets": [
     {
       "name": "release",
@@ -212,6 +219,14 @@
       "steps": [
         { "type": "configure", "name": "fuzz" },
         { "type": "build", "name": "fuzz" }
+      ]
+    },
+    {
+      "name": "package",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "package", "name": "release" }
       ]
     }
   ]

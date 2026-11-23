@@ -12,12 +12,13 @@
 - `--impl pool` and `--impl all` in the benchmark, with a fixed price ladder and
   a fixed order capacity.
 - `PoolBook::memory_bytes()` and a `pool memory` line in the benchmark.
+- `orderbook/version.hpp` generated from the project version.
 - Benchmark consistency check: implementations must agree on trades and volume.
 - `parse_csv(std::string_view)` and libFuzzer targets for the parser and the
   three books.
 - CMake presets for release, debug, clang, AddressSanitizer,
   UndefinedBehaviorSanitizer, coverage and libFuzzer, with matching workflow
-  presets.
+  presets and a package workflow.
 - Install rules and a `find_package(orderbook 0.2 CONFIG REQUIRED)` package
   exporting `orderbook::orderbook_core`, with a consumer project built against
   an installed tree in CI.
@@ -35,6 +36,8 @@
 - Independent reference model used by both differential tests.
 - Header self-checks, move-only book semantics and `noexcept` query methods and
   moves.
+- Ladder bounds exposed by `ArrayBook` and `PoolBook` through `min_price()` and
+  `max_price()`.
 
 ### Fixed
 
@@ -59,7 +62,7 @@
 
 ### Tests and CI
 
-- 55 doctest cases, 24 CLI checks and 26 CTest entries.
+- 56 doctest cases, 24 CLI checks and 26 CTest entries.
 - CTest labels `unit`, `cli` and `bench` for selective runs.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.

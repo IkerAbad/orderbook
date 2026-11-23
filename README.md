@@ -193,6 +193,12 @@ The same three steps are available as a workflow:
 cmake --workflow --preset release
 ```
 
+A package workflow configures, builds and runs CPack:
+
+```
+cmake --workflow --preset package
+```
+
 The sanitizer presets need the matching runtime installed. The `fuzz` preset
 also needs Clang. Debug builds define `_GLIBCXX_ASSERTIONS`, so libstdc++ checks
 container bounds.
@@ -267,6 +273,9 @@ book.add_limit(ob::Side::Sell, 10000, 10);  // fills 10 at 10000
 ob::ArrayBook array_book(9900, 10100, on_trade);
 ob::PoolBook pool_book(9900, 10100, 500000, on_trade);
 ```
+
+Both fixed-ladder books expose `min_price()` and `max_price()`. The
+`ORDERBOOK_VERSION_*` macros are in `<orderbook/version.hpp>`.
 
 A price outside the ladder throws `std::out_of_range`. If the remainder of an
 order would need a slot and the pool is full, `add_limit` throws
@@ -373,12 +382,12 @@ noexcept.
 
 ## Tests
 
-55 cases. The original 19 stay unchanged and cover priority rules, partial
+56 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 36 new cases cover the pool and the edges around it: slot reuse, a middle
+The 37 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, 1000 full pool cycles, a full
 pool, invalid ladders and capacities, spans that overflow `Price`, level totals
 that overflow `Quantity`, depth, empty books, zero-depth queries, zero-size
@@ -392,8 +401,9 @@ every limit and market event consumes one id, so the cancels in a generated
 trace reference the order the book actually assigned, and that `parse_csv` works
 without a file. The CSV reader round-trips a generated trace and rejects a bad
 header, a bad op, a bad side, a non-numeric field, a wrong field count and an
-empty file, and it accepts CRLF line endings and a UTF-8 BOM. Running
-`./build/orderbook_pool_tests` reports the 36 new cases.
+empty file, it reports missing paths, it accepts header-only files, CRLF line
+endings and a UTF-8 BOM. Running `./build/orderbook_pool_tests` reports the 37
+new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000

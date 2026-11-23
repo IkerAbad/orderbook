@@ -452,6 +452,29 @@ TEST_CASE("generator rejects a zero maximum quantity") {
     CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
 }
 
+TEST_CASE("trace csv reports missing paths and header-only files") {
+    const auto dir = std::filesystem::temp_directory_path();
+
+    const auto missing_file = dir / "ob_missing_file.csv";
+    std::filesystem::remove(missing_file);
+    CHECK_THROWS_AS(ob::read_csv(missing_file.string()), std::runtime_error);
+
+    const auto missing_dir = dir / "ob_missing_dir";
+    std::filesystem::remove_all(missing_dir);
+    CHECK_FALSE(ob::write_csv((missing_dir / "x.csv").string(), {}));
+
+    const auto header_only = dir / "ob_header_only.csv";
+    {
+        std::ofstream out(header_only, std::ios::binary);
+        REQUIRE(out.good());
+        out << "ts_ns,op,side,price,quantity,id\n";
+    }
+    CHECK(ob::read_csv(header_only.string()).empty());
+    std::filesystem::remove(header_only);
+
+    CHECK(ob::parse_csv("ts_ns,op,side,price,quantity,id\n").empty());
+}
+
 TEST_CASE("trace csv round-trips the generated events") {
     ob::GeneratorOptions options{};
     options.events = 500;
@@ -542,6 +565,11 @@ TEST_CASE("empty books answer every query") {
     check_empty(map_book);
     check_empty(array_book);
     check_empty(pool_book);
+
+    CHECK(array_book.min_price() == 100);
+    CHECK(array_book.max_price() == 200);
+    CHECK(pool_book.min_price() == 100);
+    CHECK(pool_book.max_price() == 200);
 }
 
 TEST_CASE("depth with zero levels returns nothing") {
@@ -718,6 +746,8 @@ TEST_CASE("queries are noexcept") {
     static_assert(noexcept(array_book.quantity_at(ob::Side::Buy, 100)));
     static_assert(noexcept(array_book.order_count()));
     static_assert(noexcept(array_book.level_count(ob::Side::Buy)));
+    static_assert(noexcept(array_book.min_price()));
+    static_assert(noexcept(array_book.max_price()));
 
     static_assert(noexcept(pool_book.best_bid()));
     static_assert(noexcept(pool_book.best_ask()));
@@ -726,6 +756,8 @@ TEST_CASE("queries are noexcept") {
     static_assert(noexcept(pool_book.level_count(ob::Side::Buy)));
     static_assert(noexcept(pool_book.capacity()));
     static_assert(noexcept(pool_book.memory_bytes()));
+    static_assert(noexcept(pool_book.min_price()));
+    static_assert(noexcept(pool_book.max_price()));
 
     CHECK(true);
 }
