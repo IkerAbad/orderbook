@@ -184,6 +184,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # replay it and print the final state of the book
 ./build/orderbook replay trace.csv
 
+# replay through every implementation and check they agree
+./build/orderbook replay trace.csv --impl all
+
 # compare the three implementations
 ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
 
@@ -329,9 +332,10 @@ Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Thirteen CLI checks cover `--help`, `--version`, a golden
-replay, the four `--impl` modes, zero runs, zero repeats, a repeat benchmark,
-zero frames, a missing option value and an unknown option.
+executed volume. Sixteen CLI checks cover `--help`, `--version`, a golden replay
+through map, array and pool, the four benchmark `--impl` modes, zero runs, zero
+repeats, a repeat benchmark, zero frames, a missing option value and an unknown
+option.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public

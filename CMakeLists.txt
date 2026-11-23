@@ -138,6 +138,21 @@ if(BUILD_TESTING)
     COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv)
   set_tests_properties(cli_replay_sample PROPERTIES
     PASS_REGULAR_EXPRESSION "events     6[\r\n]+trades     3[\r\n]+volume     15[\r\n]+cancels    1 / 1 found[\r\n]+resting    0 orders[\r\n]+levels     0 bid, 0 ask")
+
+  add_test(NAME replay_array
+    COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv --impl array)
+  set_tests_properties(replay_array PROPERTIES
+    PASS_REGULAR_EXPRESSION "trades     3[\r\n]+volume     15")
+
+  add_test(NAME replay_pool
+    COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv --impl pool)
+  set_tests_properties(replay_pool PROPERTIES
+    PASS_REGULAR_EXPRESSION "trades     3[\r\n]+volume     15")
+
+  add_test(NAME replay_all
+    COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv --impl all)
+  set_tests_properties(replay_all PROPERTIES
+    PASS_REGULAR_EXPRESSION "map, array and pool agree")
 endif()
 
 option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)

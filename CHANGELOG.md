@@ -22,6 +22,8 @@
   an installed tree in CI.
 - `--help` and `--version` in the CLI.
 - `--repeat` in the benchmark, with min, median and max over the repeats.
+- `--impl` in `replay`, with an agreement check when several implementations
+  run.
 - Independent reference model used by both differential tests.
 - Header self-checks, move-only book semantics and `noexcept` query methods.
 
@@ -46,7 +48,7 @@
 
 ### Tests and CI
 
-- 52 doctest cases, 13 CLI checks and 15 CTest entries.
+- 52 doctest cases, 16 CLI checks and 18 CTest entries.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.
 - CI runs GCC and MSVC on Linux and Windows, Clang on Linux, ASan and UBSan on
