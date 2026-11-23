@@ -1,0 +1,50 @@
+{
+  "label": "BTCUSDT 2026-11-22, 1003991 aggTrades",
+  "events": 2007982,
+  "limits": 1003991,
+  "cancels": 0,
+  "markets": 1003991,
+  "cancel_share": 0.0,
+  "cancel_share_of_limit": 0.0,
+  "duration_s": 86398.570276,
+  "events_per_second": 23.240916991861173,
+  "trades_per_second": 11.620458495930587,
+  "max_events_10ms": 800,
+  "max_events_100ms": 1886,
+  "max_events_1s": 4398,
+  "max_trades_1s": 2199,
+  "max_gap_ms": 8412.495,
+  "price_min_ticks": 5876851,
+  "price_max_ticks": 6166999,
+  "price_min": "58768.51",
+  "price_max": "61669.99",
+  "size_limit": {
+    "count": 1003991,
+    "mean": 2005708.296189906,
+    "p50": 45000,
+    "p90": 2064000,
+    "p99": 42534000,
+    "max": 4252597000,
+    "p99_over_p50": 945.2
+  },
+  "size_market": {
+    "count": 1003991,
+    "mean": 2005708.296189906,
+    "p50": 45000,
+    "p90": 2064000,
+    "p99": 42534000,
+    "max": 4252597000,
+    "p99_over_p50": 945.2
+  },
+  "size_all": {
+    "count": 2007982,
+    "mean": 2005708.296189906,
+    "p50": 45000,
+    "p90": 2064000,
+    "p99": 42534000,
+    "max": 4252597000,
+    "p99_over_p50": 945.2
+  },
+  "price_tick": "0.01",
+  "quantity_step": "0.00000001"
+}

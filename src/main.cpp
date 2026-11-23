@@ -30,6 +30,7 @@ void usage() {
         "  orderbook replay FILE [--impl map|array|pool|both|all]\n"
         "  orderbook stats FILE\n"
         "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--workload mixed|limits|cancels|markets] [--impl map|array|pool|both|all]\n"
+        "  orderbook bench --trace FILE [--runs R] [--repeat R] [--impl map|array|pool|both|all]\n"
         "  orderbook depth --events N --seed S --frames K [--levels K] [--workload mixed|limits|cancels|markets] --out FILE [--impl map|array|pool|both|all]\n";
 }
 
@@ -414,32 +415,9 @@ void print_stats(const char* name, std::vector<double> values, std::uint64_t tra
               << " trades\n";
 }
 
-int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
-              const std::string& workload, const std::string& impl) {
-    if (runs < 1) {
-        std::cerr << "--runs must be at least 1\n";
-        return 1;
-    }
-    if (repeat < 1) {
-        std::cerr << "--repeat must be at least 1\n";
-        return 1;
-    }
-
-    ob::GeneratorOptions options{};
-    options.events = events;
-    options.seed = seed;
-    if (!apply_workload(workload, options)) {
-        std::cerr << "--workload must be mixed, limits, cancels or markets\n";
-        return 1;
-    }
-
-    const auto trace = ob::generate(options);
-    const ImplSelection selection = select_impl(impl);
-    if (!selection.map && !selection.array && !selection.pool) {
-        std::cerr << "--impl must be map, array, pool, both or all\n";
-        return 1;
-    }
-
+int run_bench_loaded(const std::vector<ob::TraceEvent>& trace,
+                     const std::string& header, int runs, int repeat,
+                     const ImplSelection& selection) {
     ob::Price lo = 0;
     ob::Price hi = 0;
     bool seen = false;
@@ -466,8 +444,7 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
     lo -= 100;
     hi += 100;
 
-    std::cout << "workload  " << trace.size() << " events, seed " << seed << ", "
-              << workload << ", ladder [" << lo << ", " << hi << "]\n";
+    std::cout << header << ", ladder [" << lo << ", " << hi << "]\n";
 
     if (repeat == 1) {
         const BenchSet set =
@@ -536,6 +513,61 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
     }
 
     return 0;
+}
+
+int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
+              const std::string& workload, const std::string& impl) {
+    if (runs < 1) {
+        std::cerr << "--runs must be at least 1\n";
+        return 1;
+    }
+    if (repeat < 1) {
+        std::cerr << "--repeat must be at least 1\n";
+        return 1;
+    }
+
+    ob::GeneratorOptions options{};
+    options.events = events;
+    options.seed = seed;
+    if (!apply_workload(workload, options)) {
+        std::cerr << "--workload must be mixed, limits, cancels or markets\n";
+        return 1;
+    }
+
+    const auto trace = ob::generate(options);
+    const ImplSelection selection = select_impl(impl);
+    if (!selection.map && !selection.array && !selection.pool) {
+        std::cerr << "--impl must be map, array, pool, both or all\n";
+        return 1;
+    }
+
+    std::ostringstream header;
+    header << "workload  " << trace.size() << " events, seed " << seed << ", "
+           << workload;
+    return run_bench_loaded(trace, header.str(), runs, repeat, selection);
+}
+
+int run_bench_trace(const std::string& path, int runs, int repeat,
+                    const std::string& impl) {
+    if (runs < 1) {
+        std::cerr << "--runs must be at least 1\n";
+        return 1;
+    }
+    if (repeat < 1) {
+        std::cerr << "--repeat must be at least 1\n";
+        return 1;
+    }
+
+    const auto trace = ob::read_csv(path);
+    const ImplSelection selection = select_impl(impl);
+    if (!selection.map && !selection.array && !selection.pool) {
+        std::cerr << "--impl must be map, array, pool, both or all\n";
+        return 1;
+    }
+
+    std::ostringstream header;
+    header << "workload  " << trace.size() << " events, trace " << path;
+    return run_bench_loaded(trace, header.str(), runs, repeat, selection);
 }
 
 template <class BookT, class Factory>
@@ -723,6 +755,7 @@ int main(int argc, char** argv) {
     std::size_t levels = 15;
     std::string out;
     std::string input;
+    std::string trace;
     std::string impl = "all";
     bool impl_set = false;
     std::string workload = "mixed";
@@ -755,6 +788,8 @@ int main(int argc, char** argv) {
                 workload_set = true;
             } else if (arg == "--out") {
                 out = value("--out");
+            } else if (arg == "--trace") {
+                trace = value("--trace");
             } else if (arg == "--impl") {
                 impl = value("--impl");
                 impl_set = true;
@@ -768,6 +803,15 @@ int main(int argc, char** argv) {
         }
     } catch (const std::exception& e) {
         std::cerr << "bad argument: " << e.what() << '\n';
+        return 1;
+    }
+
+    if (!trace.empty() && command != "bench") {
+        std::cerr << "--trace is only used by bench\n";
+        return 1;
+    }
+    if (!trace.empty() && !input.empty()) {
+        std::cerr << "provide the trace once\n";
         return 1;
     }
 
@@ -798,6 +842,14 @@ int main(int argc, char** argv) {
             return run_stats(input);
         }
         if (command == "bench") {
+            if (!trace.empty() || !input.empty()) {
+                if (workload_set) {
+                    std::cerr << "--workload is not used with a trace file\n";
+                    return 1;
+                }
+                return run_bench_trace(trace.empty() ? input : trace, runs, repeat,
+                                       impl);
+            }
             return run_bench(events, seed, runs, repeat, workload, impl);
         }
         if (command == "depth") {

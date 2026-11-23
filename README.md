@@ -57,24 +57,113 @@ after construction. `depth` allocates its result vector.
 
 ## Benchmark
 
+### Synthetic workload
+
 ```
 $ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 10 --impl all
 workload  1000000 events, seed 42, mixed, ladder [9809, 10339]
-map    min 148.1  median 156.7  max 173.4 ns/event   457777 trades
-array  min 124.6  median 133.5  max 147.7 ns/event   457777 trades
-pool   min 46.8  median 51.2  max 61.1 ns/event   457777 trades
+map    min 173.8  median 177.6  max 241.3 ns/event   457777 trades
+array  min 150.7  median 157.2  max 189.4 ns/event   457777 trades
+pool   min 64.3  median 74.6  max 95.0 ns/event   457777 trades
 pool memory  36.8 MiB, 650012 slots
 ```
 
 Measured on 2026-11-23 on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
 single thread. Each repeat is the best of three runs and the table summarises
-ten repeats. Using the medians, `PoolBook` is 3.1 times faster than `Book` and
-2.6 times faster than `ArrayBook`. The min and max columns show the spread of
+ten repeats. Using the medians, `PoolBook` is 2.4 times faster than `Book` and
+2.1 times faster than `ArrayBook`. The min and max columns show the spread of
 this machine. The pool line is followed by the memory reserved for its vectors:
 36.8 MiB for 650,012 slots and the id table. The trace itself is not included.
 When more than one implementation runs, the command also checks that they
 produced the same trade count and volume before printing. A mismatch fails the
 run.
+
+### Real BTCUSDT day
+
+`benchmarks/btcusdt-2026-11-22.csv.zst` is one UTC day of BTCUSDT aggregate
+trades, 1,003,991 trades from 2026-11-22. `tools/parquet_to_trace.py` reads the
+Parquet written in the `market-data-service` schema. The public trade feed has
+no order ids, no resting depth and no cancels, so the converter writes one limit
+order and one market order per trade: the limit order rests at the trade price
+on the maker side and the market order hits it on the aggressor side. The real
+prices, sizes, timestamps and aggressor side are preserved. The book is flat
+between trades.
+
+```
+$ zstd -d benchmarks/btcusdt-2026-11-22.csv.zst -o data/btcusdt-2026-11-22.csv
+$ ./build/orderbook bench --trace data/btcusdt-2026-11-22.csv --runs 3 --repeat 10 --impl all
+workload  2007982 events, trace data/btcusdt-2026-11-22.csv, ladder [5876751, 6167099]
+map    min 62.4  median 62.5  max 63.3 ns/event   1003991 trades
+array  min 56.8  median 58.3  max 60.7 ns/event   1003991 trades
+pool   min 52.7  median 54.1  max 58.0 ns/event   1003991 trades
+pool memory  71.2 MiB, 1003991 slots
+```
+
+Measured on the same Ryzen 9 5900X, Windows 11, GCC 14.2 build on 2026-11-23,
+with the same three runs and ten repeats.
+
+| Workload | Events | Trades | `map` | `array` | `pool` | pool vs map |
+|---|---|---|---|---|---|---|
+| Synthetic mixed | 1,000,000 | 457,777 | 177.6 | 157.2 | 74.6 | 2.4x |
+| BTCUSDT 2026-11-22 | 2,007,982 | 1,003,991 | 62.5 | 58.3 | 54.1 | 1.2x |
+
+The real trace is faster per event for all three books because the
+reconstructed book holds at most one order. There is no deep tree to walk, no
+cancel to process and no 650,000-order working set. The pool's lead falls from
+2.4x to 1.2x: most of its synthetic win comes from avoiding a `std::list` node
+and an `unordered_map` node per resting order, and from not chasing two
+pointers per fill. With one order at a time that work is small.
+
+The real day spans 290,148 price ticks between its lowest and highest limit
+price, against 330 in the synthetic mixed run. `ArrayBook` and `PoolBook` track
+the number of non-empty levels, so an emptied side flips `has_bid_` or
+`has_ask_` without scanning the ladder. Before that change every market order
+scanned up to 290,000 empty levels and the two ladder books cost 26 to 30
+microseconds per event on this trace.
+
+The pool memory line is a conservative bound: one slot per limit event. The
+real trace reserves 1,003,991 slots although at most one order is live. A
+deployment should size the pool from peak live orders, as the Limitations
+section says.
+
+### What the traces contain
+
+Both reports come from `tools/trace_report.py`, which reads the same CSV the
+engine reads. The JSON outputs are in `benchmarks/`.
+
+| Metric | Synthetic mixed | BTCUSDT 2026-11-22 |
+|---|---|---|
+| Events | 1,000,000 | 2,007,982 |
+| Limit / cancel / market | 650,012 / 199,987 / 150,001 | 1,003,991 / 0 / 1,003,991 |
+| Cancel share | 20.00 % | 0.00 % |
+| Duration | 1.000 s | 86,398.570 s |
+| Events per second | 1,000,001 | 23.24 |
+| Trades per second | 150,001 | 11.62 |
+| Max events, 10 ms / 100 ms / 1 s | 10,000 / 100,000 / 1,000,000 | 800 / 1,886 / 4,398 |
+| Max trades, 1 s | 150,001 | 2,199 |
+| Max inter-arrival gap | 0.001 ms | 8,412.495 ms |
+| Price range | 9,909 .. 10,239 trace units | 58,768.51 .. 61,669.99 USDT |
+| Size p50 / p90 / p99 / max | 50 / 91 / 99 / 100 trace units | 0.00045 / 0.02064 / 0.42534 / 42.52597 BTC |
+| p99 / p50 | 1.98 | 945.20 |
+
+The differences are the point:
+
+- **Sizes.** Synthetic sizes are uniform 1..100, so p99/p50 is 1.98. Real BTC
+  sizes are heavy-tailed: median 0.00045 BTC, p99 0.42534 BTC, p99/p50 945, max
+  42.52597 BTC. The synthetic generator cannot exercise that skew.
+- **Bursts.** The synthetic trace is a throughput stream: 1,000,000 events in
+  one second, with a 1 microsecond gap between events. The real day averages
+  23.24 events per second, peaks at 4,398 events in one second and 800 in
+  10 ms, and has an 8.4 second quiet gap. The synthetic trace is a CPU
+  benchmark, not a market clock.
+- **Cancels.** Synthetic mixed is 20.00 % cancels. The real trace is 0.00 %:
+  aggregate trades do not say whether a resting order was cancelled or filled,
+  and the converter never invents a cancel. The cancel path remains covered by
+  the synthetic workloads and the unit tests.
+- **Depth.** The synthetic run writes 650,012 limit events, so the pool reserves
+  650,012 slots and the map works over a deep book. The real trace has one live
+  order at a time. That is why the absolute numbers are lower on the real trace
+  and why the pool's lead shrinks.
 
 ### Workloads
 
@@ -95,10 +184,10 @@ ten-repeat run above.
 
 | Workload | `map` | `array` | `pool` |
 |---|---|---|---|
-| `mixed` | 156.7 | 133.5 | 51.2 |
-| `limits` | 201.2 | 190.2 | 89.1 |
-| `cancels` | 91.2 | 62.0 | 36.2 |
-| `markets` | 92.7 | 70.3 | 41.5 |
+| `mixed` | 177.6 | 157.2 | 74.6 |
+| `limits` | 248.3 | 234.4 | 114.8 |
+| `cancels` | 92.7 | 64.6 | 52.4 |
+| `markets` | 94.5 | 73.5 | 61.8 |
 
 ```
 ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 5 --workload limits --impl all
@@ -122,17 +211,17 @@ order, which explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 23.2 ns/event, 14.8 % of the map median. Price-level
+- `map` to `array` saves 20.4 ns/event, 11.5 % of the map median. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 82.3 ns/event, 61.6 % of the array median. A resting
+- `array` to `pool` saves 82.6 ns/event, 52.5 % of the array median. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
-- The second change is about 3.5 times larger than the first. That is the
+- The second change is about 4.0 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
   paid the per-order allocation, and 65 % of the events are limit orders in the
   mixed workload.
-- The remaining 51 ns/event are the match loop, the callback, the trade
+- The remaining 74.6 ns/event are the match loop, the callback, the trade
   counters, the id hash and ordinary branch and cache misses. This build does
   not profile them further.
 
@@ -260,6 +349,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # ten repeats with min, median and max
 ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 10 --impl all
 
+# benchmark a recorded trace
+./build/orderbook bench --trace data/btcusdt-2026-11-22.csv --runs 3 --repeat 10 --impl all
+
 # export depth snapshots for the plot
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
 python tools/visualize.py --input depth.csv --png docs/depth.png --gif docs/depth.gif
@@ -270,6 +362,13 @@ python tools/visualize.py --input depth.csv --png docs/depth.png --gif docs/dept
 # check that every implementation produces the same depth CSV
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv --impl all
 ```
+
+The trace files come from the Parquet written by `market-data-service`.
+`tools/binance_archive_to_parquet.py` normalizes a Binance daily archive into
+that schema, `tools/parquet_to_trace.py` writes the replay CSV and
+`tools/trace_report.py` produces the statistics. They need Python 3.10+ and
+`pyarrow`. The exact commands, hashes and conversion model are in
+`benchmarks/README.md`.
 
 As a library:
 
@@ -354,7 +453,8 @@ src/                library sources and the CLI
 tests/              doctest suites, reference model and header self-checks
 fuzz/               libFuzzer targets and seed corpora
 examples/consumer/  consumer built with find_package
-tools/              depth visualizer
+benchmarks/         real BTCUSDT day, hashes, trace reports and provenance
+tools/              trace converter, trace report and depth visualizer
 ```
 
 ## Design decisions
@@ -377,6 +477,14 @@ slot and every link when it is constructed. Resting, cancelling and matching
 never touch the heap. The price is a fixed capacity chosen by the caller, and a
 full pool is an error instead of a hidden `malloc`.
 
+**An emptied side is O(1).** `ArrayBook` and `PoolBook` keep a count of
+non-empty levels. When a match or a cancel removes the last order on a side,
+`has_bid_` or `has_ask_` flips without walking the fixed ladder. When another
+level is still occupied, the scan resumes from the old best price and stops at
+the next non-empty level. The real BTCUSDT day made this visible: a day-wide
+ladder has 290,000 ticks and a flat book would otherwise scan all of them after
+every trade.
+
 **One thread.** Determinism is worth more than parallelism here. A benchmark
 with threads measures the scheduler as much as the book.
 
@@ -394,12 +502,19 @@ noexcept.
 - `Book` and `ArrayBook` allocate when an order rests. A `std::bad_alloc` during
   that step can leave the book partially updated. `PoolBook` has no allocation
   window after construction.
-- The synthetic generator is a Poisson-like flow, not real market data. The CSV
-  format exists so real captures can be replayed later.
+- The synthetic generator is a Poisson-like flow, not real market data. A real
+  BTCUSDT day can be replayed with `bench --trace`, but the public aggregate
+  trade feed has no order ids, no resting depth and no cancels. The converter
+  models each trade with one limit order and one market order, so the real trace
+  measures the add and match path on real prices, sizes and timing, not a full
+  order-by-order book.
+- Cancels and deep-book behaviour are covered by the synthetic workloads and the
+  unit tests, not by the real trace.
 - `ArrayBook` and `PoolBook` need a fixed price range. Outside it, the price is
   rejected.
 - `PoolBook` needs a bound on resting orders. In the benchmark the bound is the
-  number of limit events, which is safe but conservative. A production
+  number of limit events, which is safe but conservative. On the real day that
+  reserves 1,003,991 slots although at most one order is live. A production
   deployment would size the pool from its peak live orders plus a margin.
 - Per-event latency percentiles are not published because the Windows clock
   ticks at 100 ns, which is the same order as the operation itself. The
@@ -491,11 +606,18 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 3,1 veces más rápido que la versión
-con `std::map` y 2,6 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 23,2 ns por evento. El cambio de array a pool ahorra 82,3
-ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
-por cada orden. Esa era la parte que impedía que el array destacara.
+Sobre un millón de eventos sintéticos, `PoolBook` es 2,4 veces más rápido que
+la versión con `std::map` y 2,1 veces más rápido que la versión con array. El
+cambio de `map` a array ahorra 20,4 ns por evento. El cambio de array a pool
+ahorra 82,6 ns por evento, porque elimina la reserva del nodo de lista y del
+nodo del índice por cada orden. Esa era la parte que impedía que el array
+destacara.
+
+También se puede reproducir un día real de BTCUSDT, 2026-11-22, con
+`bench --trace`. El fichero comprimido y su hash están en `benchmarks/`. Como el
+replay reconstruido mantiene una sola orden viva cada vez, el pool pasa a ser
+solo 1,2 veces más rápido que el mapa, y el día real no contiene cancelaciones
+porque el feed público de aggTrades no las publica.
 
 Los tests cubren las reglas de prioridad, las ejecuciones parciales, el recorrido
 de niveles por parte de las órdenes a mercado, la semántica de `cancel` y

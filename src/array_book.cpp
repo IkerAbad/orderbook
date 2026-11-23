@@ -49,6 +49,10 @@ void ArrayBook::advance_bid() {
     if (!has_bid_) {
         return;
     }
+    if (active_bid_levels_ == 0) {
+        has_bid_ = false;
+        return;
+    }
     while (bids_[best_bid_].orders.empty()) {
         if (best_bid_ == 0) {
             has_bid_ = false;
@@ -60,6 +64,10 @@ void ArrayBook::advance_bid() {
 
 void ArrayBook::advance_ask() {
     if (!has_ask_) {
+        return;
+    }
+    if (active_ask_levels_ == 0) {
+        has_ask_ = false;
         return;
     }
     while (asks_[best_ask_].orders.empty()) {
@@ -80,9 +88,13 @@ void ArrayBook::rest(Order order) {
         if (order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
             throw std::overflow_error("level quantity overflow");
         }
+        const bool was_empty = level.orders.empty();
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());
+        if (was_empty) {
+            ++active_bid_levels_;
+        }
         if (!has_bid_ || i > best_bid_) {
             best_bid_ = i;
             has_bid_ = true;
@@ -92,9 +104,13 @@ void ArrayBook::rest(Order order) {
         if (order.quantity > std::numeric_limits<Quantity>::max() - level.total) {
             throw std::overflow_error("level quantity overflow");
         }
+        const bool was_empty = level.orders.empty();
         level.orders.push_back(order);
         level.total += order.quantity;
         loc.it = std::prev(level.orders.end());
+        if (was_empty) {
+            ++active_ask_levels_;
+        }
         if (!has_ask_ || i < best_ask_) {
             best_ask_ = i;
             has_ask_ = true;
@@ -129,6 +145,9 @@ Quantity ArrayBook::match_asks(Order& taker, Price limit, bool has_limit) {
             if (maker.quantity == 0) {
                 index_.erase(maker.id);
                 level.orders.pop_front();
+                if (level.orders.empty()) {
+                    --active_ask_levels_;
+                }
             }
         }
 
@@ -163,6 +182,9 @@ Quantity ArrayBook::match_bids(Order& taker, Price limit, bool has_limit) {
             if (maker.quantity == 0) {
                 index_.erase(maker.id);
                 level.orders.pop_front();
+                if (level.orders.empty()) {
+                    --active_bid_levels_;
+                }
             }
         }
 
@@ -210,15 +232,21 @@ void ArrayBook::remove(OrderId id) {
         auto& level = bids_[i];
         level.total -= loc.it->quantity;
         level.orders.erase(loc.it);
-        if (level.orders.empty() && has_bid_ && i == best_bid_) {
-            advance_bid();
+        if (level.orders.empty()) {
+            --active_bid_levels_;
+            if (has_bid_ && i == best_bid_) {
+                advance_bid();
+            }
         }
     } else {
         auto& level = asks_[i];
         level.total -= loc.it->quantity;
         level.orders.erase(loc.it);
-        if (level.orders.empty() && has_ask_ && i == best_ask_) {
-            advance_ask();
+        if (level.orders.empty()) {
+            --active_ask_levels_;
+            if (has_ask_ && i == best_ask_) {
+                advance_ask();
+            }
         }
     }
 
@@ -322,10 +350,7 @@ ArrayBook::Depth ArrayBook::depth(Side side, std::size_t levels) const {
 }
 
 std::size_t ArrayBook::level_count(Side side) const noexcept {
-    const auto& levels = side == Side::Buy ? bids_ : asks_;
-    return static_cast<std::size_t>(std::count_if(
-        levels.begin(), levels.end(),
-        [](const Level& level) { return !level.orders.empty(); }));
+    return side == Side::Buy ? active_bid_levels_ : active_ask_levels_;
 }
 
 }  // namespace ob

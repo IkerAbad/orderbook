@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `bench --trace FILE` runs the same timing harness on a recorded CSV instead
+  of the synthetic generator.
+- `tools/binance_archive_to_parquet.py` normalizes a Binance daily aggTrades
+  archive into the `market-data-service` Parquet schema.
+- `tools/parquet_to_trace.py` converts that Parquet into a replay CSV, with one
+  limit order and one market order per aggregate trade.
+- `tools/trace_report.py` measures event mix, size distribution, bursts and
+  cancel share from the CSV that the engine reads.
+- `benchmarks/` holds one full UTC day of BTCUSDT, 2026-11-22, compressed with
+  zstd, with the SHA256 of the archive, the Parquet and the CSV.
+- README comparison between the synthetic mixed workload and the real day.
+
+### Fixed
+
+- `ArrayBook` and `PoolBook` track the number of non-empty levels, so an emptied
+  side does not scan the whole price ladder to find the next best price. On the
+  real BTCUSDT day this removed a 26 to 30 microsecond scan per market order.
+
+### Tests and CI
+
+- 28 CTest entries. The new `bench_trace` check runs the benchmark from
+  `tests/data/sample.csv` through all three books.
+
 ## 1.0.0 - 2026-11-23
 
 First public release. The engine and tooling changes are listed under 0.2.0.

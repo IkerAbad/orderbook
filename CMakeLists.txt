@@ -212,6 +212,13 @@ if(BUILD_TESTING)
   set_tests_properties(bench_workload_limits PROPERTIES
     PASS_REGULAR_EXPRESSION "limits")
 
+  add_test(NAME bench_trace
+    COMMAND orderbook bench --trace ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv
+            --runs 1 --repeat 2 --impl all)
+  set_tests_properties(bench_trace PROPERTIES
+    PASS_REGULAR_EXPRESSION "trace .*sample.csv"
+    LABELS "cli;bench")
+
   add_test(NAME cli_zero_levels
     COMMAND orderbook depth --events 10 --seed 1 --frames 1 --levels 0
             --out ${CMAKE_CURRENT_BINARY_DIR}/zero_levels.csv)

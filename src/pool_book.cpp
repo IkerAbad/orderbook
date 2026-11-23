@@ -183,6 +183,10 @@ void PoolBook::advance_bid() {
     if (!has_bid_) {
         return;
     }
+    if (active_bid_levels_ == 0) {
+        has_bid_ = false;
+        return;
+    }
     while (bids_[best_bid_].head == kNone) {
         if (best_bid_ == 0) {
             has_bid_ = false;
@@ -194,6 +198,10 @@ void PoolBook::advance_bid() {
 
 void PoolBook::advance_ask() {
     if (!has_ask_) {
+        return;
+    }
+    if (active_ask_levels_ == 0) {
+        has_ask_ = false;
         return;
     }
     while (asks_[best_ask_].head == kNone) {
@@ -214,16 +222,23 @@ void PoolBook::rest(Order order) {
     }
 
     const std::uint32_t slot = alloc_slot();
+    const bool was_empty = level.head == kNone;
     orders_[slot] = order;
     push_back(level, slot);
     level.total += order.quantity;
 
     if (order.side == Side::Buy) {
+        if (was_empty) {
+            ++active_bid_levels_;
+        }
         if (!has_bid_ || i > best_bid_) {
             best_bid_ = i;
             has_bid_ = true;
         }
     } else {
+        if (was_empty) {
+            ++active_ask_levels_;
+        }
         if (!has_ask_ || i < best_ask_) {
             best_ask_ = i;
             has_ask_ = true;
@@ -260,6 +275,9 @@ Quantity PoolBook::match_asks(Order& taker, Price limit, bool has_limit) {
             if (maker.quantity == 0) {
                 pop_front(level);
                 release(slot);
+                if (level.head == kNone) {
+                    --active_ask_levels_;
+                }
             }
         }
 
@@ -295,6 +313,9 @@ Quantity PoolBook::match_bids(Order& taker, Price limit, bool has_limit) {
             if (maker.quantity == 0) {
                 pop_front(level);
                 release(slot);
+                if (level.head == kNone) {
+                    --active_bid_levels_;
+                }
             }
         }
 
@@ -349,10 +370,12 @@ bool PoolBook::remove(OrderId id) {
 
     if (level.head == kNone) {
         if (side == Side::Buy) {
+            --active_bid_levels_;
             if (has_bid_ && i == best_bid_) {
                 advance_bid();
             }
         } else {
+            --active_ask_levels_;
             if (has_ask_ && i == best_ask_) {
                 advance_ask();
             }
@@ -455,10 +478,7 @@ PoolBook::Depth PoolBook::depth(Side side, std::size_t levels) const {
 }
 
 std::size_t PoolBook::level_count(Side side) const noexcept {
-    const auto& levels = side == Side::Buy ? bids_ : asks_;
-    return static_cast<std::size_t>(std::count_if(
-        levels.begin(), levels.end(),
-        [](const Level& level) { return level.head != kNone; }));
+    return side == Side::Buy ? active_bid_levels_ : active_ask_levels_;
 }
 
 std::size_t PoolBook::memory_bytes() const noexcept {

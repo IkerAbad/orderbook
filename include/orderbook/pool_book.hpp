@@ -68,6 +68,8 @@ private:
     std::vector<Level> asks_;
     std::size_t best_bid_{0};
     std::size_t best_ask_{0};
+    std::size_t active_bid_levels_{0};
+    std::size_t active_ask_levels_{0};
     bool has_bid_{false};
     bool has_ask_{false};
 

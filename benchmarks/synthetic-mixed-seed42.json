@@ -1,0 +1,50 @@
+{
+  "label": "Synthetic mixed, 1M events, seed 42",
+  "events": 1000000,
+  "limits": 650012,
+  "cancels": 199987,
+  "markets": 150001,
+  "cancel_share": 0.199987,
+  "cancel_share_of_limit": 0.23527910032835334,
+  "duration_s": 0.999999,
+  "events_per_second": 1000001.000001,
+  "trades_per_second": 150001.15000115,
+  "max_events_10ms": 10000,
+  "max_events_100ms": 100000,
+  "max_events_1s": 1000000,
+  "max_trades_1s": 150001,
+  "max_gap_ms": 0.001,
+  "price_min_ticks": 9909,
+  "price_max_ticks": 10239,
+  "price_min": "9909",
+  "price_max": "10239",
+  "size_limit": {
+    "count": 650012,
+    "mean": 50.50541989994031,
+    "p50": 50,
+    "p90": 91,
+    "p99": 99,
+    "max": 100,
+    "p99_over_p50": 1.98
+  },
+  "size_market": {
+    "count": 150001,
+    "mean": 50.508076612822585,
+    "p50": 51,
+    "p90": 90,
+    "p99": 99,
+    "max": 100,
+    "p99_over_p50": 1.9411764705882353
+  },
+  "size_all": {
+    "count": 800013,
+    "mean": 50.505918028832035,
+    "p50": 50,
+    "p90": 91,
+    "p99": 99,
+    "max": 100,
+    "p99_over_p50": 1.98
+  },
+  "price_tick": "1",
+  "quantity_step": "1"
+}
