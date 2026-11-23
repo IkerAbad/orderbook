@@ -336,7 +336,9 @@ cpack -G ZIP
 ```
 
 The archive contains the library, the headers, the CLI, the CMake package and
-the documentation. A source archive is also available:
+the documentation. The Windows ZIP contains a statically linked
+`orderbook.exe` that does not need the MinGW runtime DLLs. A source archive is
+also available:
 
 ```
 cd build

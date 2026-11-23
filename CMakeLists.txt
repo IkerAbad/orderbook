@@ -29,7 +29,7 @@ else()
 endif()
 
 if(MINGW)
-  add_link_options(-static-libgcc -static-libstdc++)
+  add_link_options(-static)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

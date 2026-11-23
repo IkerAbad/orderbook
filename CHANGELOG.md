@@ -12,6 +12,8 @@ This release adds the publication and continuous fuzzing pipeline.
 - Weekly long libFuzzer job, 600 seconds per target, in addition to the
   60-second run on every push.
 - Corpus artifacts published from the fuzzing jobs.
+- The Windows package links the MinGW runtime statically, so the downloaded
+  binary runs without extra DLLs.
 
 ### Tests and CI
 
