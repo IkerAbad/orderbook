@@ -156,6 +156,12 @@ cmake --build --preset release
 ctest --preset release
 ```
 
+The same three steps are available as a workflow:
+
+```
+cmake --workflow --preset release
+```
+
 The sanitizer presets need the matching runtime installed. The `fuzz` preset
 also needs Clang. Debug builds define `_GLIBCXX_ASSERTIONS`, so libstdc++ checks
 container bounds.

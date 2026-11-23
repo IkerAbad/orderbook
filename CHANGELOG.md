@@ -16,7 +16,8 @@
 - `parse_csv(std::string_view)` and libFuzzer targets for the parser and the
   three books.
 - CMake presets for release, debug, clang, AddressSanitizer,
-  UndefinedBehaviorSanitizer, coverage and libFuzzer.
+  UndefinedBehaviorSanitizer, coverage and libFuzzer, with matching workflow
+  presets.
 - Install rules and a `find_package(orderbook 0.2 CONFIG REQUIRED)` package
   exporting `orderbook::orderbook_core`, with a consumer project built against
   an installed tree in CI.
