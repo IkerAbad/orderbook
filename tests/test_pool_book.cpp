@@ -813,6 +813,81 @@ TEST_CASE("the books and the reference model agree on random modifies") {
     CHECK(map_book.order_count() == reference.order_count());
 }
 
+TEST_CASE("the books agree across seeds") {
+    constexpr std::uint64_t seeds[] = {3, 11, 29};
+
+    for (const std::uint64_t seed : seeds) {
+        CAPTURE(seed);
+
+        ob::GeneratorOptions options{};
+        options.events = 5'000;
+        options.seed = seed;
+        const auto trace = ob::generate(options);
+
+        ob::Price lo = 0;
+        ob::Price hi = 0;
+        bool seen = false;
+        std::size_t limit_events = 0;
+        for (const ob::TraceEvent& e : trace) {
+            if (e.op != 'L') {
+                continue;
+            }
+            ++limit_events;
+            if (!seen) {
+                lo = hi = e.price;
+                seen = true;
+            } else {
+                lo = std::min(lo, e.price);
+                hi = std::max(hi, e.price);
+            }
+        }
+        REQUIRE(seen);
+        lo -= 50;
+        hi += 50;
+
+        std::vector<ob::Trade> map_trades;
+        std::vector<ob::Trade> array_trades;
+        std::vector<ob::Trade> pool_trades;
+        std::uint64_t map_volume = 0;
+        std::uint64_t array_volume = 0;
+        std::uint64_t pool_volume = 0;
+
+        ob::Book map_book([&](const ob::Trade& t) {
+            map_trades.push_back(t);
+            map_volume += t.quantity;
+        });
+        ob::ArrayBook array_book(lo, hi, [&](const ob::Trade& t) {
+            array_trades.push_back(t);
+            array_volume += t.quantity;
+        });
+        ob::PoolBook pool_book(lo, hi, limit_events, [&](const ob::Trade& t) {
+            pool_trades.push_back(t);
+            pool_volume += t.quantity;
+        });
+
+        for (std::size_t i = 0; i < trace.size(); ++i) {
+            apply(map_book, trace[i]);
+            apply(array_book, trace[i]);
+            apply(pool_book, trace[i]);
+
+            if (i % 250 == 0) {
+                CHECK(map_book.order_count() == array_book.order_count());
+                CHECK(map_book.order_count() == pool_book.order_count());
+                CHECK(map_book.best_bid() == array_book.best_bid());
+                CHECK(map_book.best_bid() == pool_book.best_bid());
+                CHECK(map_book.best_ask() == array_book.best_ask());
+                CHECK(map_book.best_ask() == pool_book.best_ask());
+            }
+        }
+
+        check_trades_equal(map_trades, array_trades);
+        check_trades_equal(map_trades, pool_trades);
+        CHECK(map_volume == array_volume);
+        CHECK(map_volume == pool_volume);
+        CHECK(map_book.order_count() == pool_book.order_count());
+    }
+}
+
 TEST_CASE("the books and the reference model agree on a random workload") {
     ob::GeneratorOptions options{};
     options.events = 20'000;
