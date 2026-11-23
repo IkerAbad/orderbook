@@ -174,6 +174,13 @@ if(BUILD_TESTING)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_depth.cmake)
   set_tests_properties(depth_consistency PROPERTIES LABELS "cli;bench")
 
+  add_test(NAME cli_generate_reproducible
+    COMMAND ${CMAKE_COMMAND}
+      -DORDERBOOK=$<TARGET_FILE:orderbook>
+      -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_generate.cmake)
+  set_tests_properties(cli_generate_reproducible PROPERTIES LABELS "cli")
+
   set_tests_properties(
     cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
     cli_missing_value cli_unknown_option cli_help cli_version
@@ -237,3 +244,14 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/orderbookConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/orderbookConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/orderbook)
+
+set(CPACK_PACKAGE_NAME "orderbook")
+set(CPACK_PACKAGE_VENDOR "Iker Abad")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Limit order book and matching engine in C++23")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_FILE_NAME
+    "orderbook-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_GENERATOR "ZIP;TGZ")
+include(CPack)

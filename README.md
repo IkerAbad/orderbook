@@ -256,6 +256,19 @@ subdirectory or packaged. Set `-DORDERBOOK_BUILD_CLI=OFF` to build only the
 library and skip the command line tool. The `examples/consumer` project is
 built against an installed tree in CI.
 
+## Package
+
+CPack builds a ZIP or TGZ from the install tree:
+
+```
+cmake --build build
+cd build
+cpack -G ZIP
+```
+
+The archive contains the library, the headers, the CLI, the CMake package and
+the documentation.
+
 ## Project layout
 
 ```
@@ -344,12 +357,13 @@ Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Eighteen CLI checks cover `--help`, `--version`, a golden
-replay through map, array and pool, a depth run through all implementations, a
-byte-for-byte map/pool depth comparison, the four benchmark `--impl` modes, zero
-runs, zero repeats, a repeat benchmark, zero frames, a missing option value and
-an unknown option. `ctest -L unit` runs the two doctest binaries, `ctest -L cli`
-runs the command line checks and `ctest -L bench` runs the benchmark modes.
+executed volume. Nineteen CLI checks cover `--help`, `--version`, a reproducible
+generate run, a golden replay through map, array and pool, a depth run through
+all implementations, a byte-for-byte map/pool depth comparison, the four
+benchmark `--impl` modes, zero runs, zero repeats, a repeat benchmark, zero
+frames, a missing option value and an unknown option. `ctest -L unit` runs the
+two doctest binaries, `ctest -L cli` runs the command line checks and
+`ctest -L bench` runs the benchmark modes.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public
@@ -360,9 +374,10 @@ and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
 Clang also build with `-Wconversion` and `-Wsign-conversion`. GCC adds its
 duplicated-condition, logical-op, useless-cast and cast-qual warnings. Warnings
 are errors in every compiler job. Both build jobs also install the package, run
-the installed CLI, build `examples/consumer` against the installation and
-compile trees with `BUILD_TESTING=OFF` and `ORDERBOOK_BUILD_CLI=OFF`. A separate
-job checks that line coverage of the library sources stays at or above 90 %.
+the installed CLI, build `examples/consumer` against the installation, produce a
+ZIP with CPack and compile trees with `BUILD_TESTING=OFF` and
+`ORDERBOOK_BUILD_CLI=OFF`. A separate job checks that line coverage of the
+library sources stays at or above 90 %.
 
 ## Fuzzing
 

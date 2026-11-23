@@ -46,6 +46,13 @@ jobs:
           if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
           "$exe"
 
+      - name: Build a package
+        shell: bash
+        run: |
+          cd build
+          cpack -G ZIP
+          test -f orderbook-*.zip
+
       - name: Build without tests
         run: |
           cmake -S . -B build-min -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
