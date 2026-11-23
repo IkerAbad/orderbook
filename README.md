@@ -308,12 +308,12 @@ noexcept.
 
 ## Tests
 
-52 cases. The original 19 stay unchanged and cover priority rules, partial
+53 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 33 new cases cover the pool and the edges around it: slot reuse, a middle
+The 34 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, 1000 full pool cycles, a full
 pool, invalid ladders and capacities, spans that overflow `Price`, level totals
 that overflow `Quantity`, depth, empty books, zero-depth queries, zero-size
@@ -326,8 +326,8 @@ market event consumes one id, so the cancels in a generated trace reference the
 order the book actually assigned, and that `parse_csv` works without a file. The
 CSV reader round-trips a generated trace and rejects a bad header, a bad op, a
 bad side, a non-numeric field, a wrong field count and an empty file, and it
-accepts CRLF line endings. Running `./build/orderbook_pool_tests` reports the 33
-new cases.
+accepts CRLF line endings and a UTF-8 BOM. Running
+`./build/orderbook_pool_tests` reports the 34 new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000

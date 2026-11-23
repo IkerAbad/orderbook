@@ -42,14 +42,14 @@
 - The CLI accepted unknown options, missing option values and extra positional
   arguments. They are now errors.
 - The CSV reader now validates the header, the op and the side, reports the line
-  number, accepts CRLF and rejects empty files.
+  number, accepts CRLF and a UTF-8 BOM and rejects empty files.
 - A zero `max_quantity` in the generator is rejected.
 - doctest 2.4.11 includes `<ciso646>` under Clang, which libstdc++ 15 turns into
   a warning. The test targets suppress that diagnostic.
 
 ### Tests and CI
 
-- 52 doctest cases, 16 CLI checks and 18 CTest entries.
+- 53 doctest cases, 16 CLI checks and 18 CTest entries.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.
 - CI runs GCC and MSVC on Linux and Windows, Clang on Linux, ASan and UBSan on

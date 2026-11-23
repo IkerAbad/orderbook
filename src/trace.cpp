@@ -148,7 +148,15 @@ std::vector<TraceEvent> parse_csv(std::string_view text) {
         throw std::runtime_error("trace is empty");
     }
     ++line_number;
-    if (*header != kHeader) {
+
+    std::string_view header_line = *header;
+    if (header_line.size() >= 3 &&
+        static_cast<unsigned char>(header_line[0]) == 0xEF &&
+        static_cast<unsigned char>(header_line[1]) == 0xBB &&
+        static_cast<unsigned char>(header_line[2]) == 0xBF) {
+        header_line.remove_prefix(3);
+    }
+    if (header_line != kHeader) {
         throw std::runtime_error("unexpected trace header at line 1");
     }
 

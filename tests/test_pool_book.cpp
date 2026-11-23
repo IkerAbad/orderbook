@@ -604,6 +604,18 @@ TEST_CASE("a crossing limit can rest after freeing pool slots") {
     CHECK(book.best_ask() == std::nullopt);
 }
 
+TEST_CASE("trace csv accepts a UTF-8 BOM") {
+    const auto events = ob::parse_csv(
+        "\xEF\xBB\xBF"
+        "ts_ns,op,side,price,quantity,id\n"
+        "0,L,B,100,10,1\n");
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].op == 'L');
+    CHECK(events[0].side == ob::Side::Buy);
+    CHECK(events[0].price == 100);
+    CHECK(events[0].id == 1);
+}
+
 TEST_CASE("parse_csv works on a string") {
     const auto events = ob::parse_csv(
         "ts_ns,op,side,price,quantity,id\n"
