@@ -50,6 +50,7 @@
 ### Tests and CI
 
 - 53 doctest cases, 16 CLI checks and 18 CTest entries.
+- CTest labels `unit`, `cli` and `bench` for selective runs.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.
 - CI runs GCC and MSVC on Linux and Windows, Clang on Linux, ASan and UBSan on

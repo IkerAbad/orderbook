@@ -336,7 +336,8 @@ compare best prices, live orders, level counts, depth, every trade and the
 executed volume. Sixteen CLI checks cover `--help`, `--version`, a golden replay
 through map, array and pool, the four benchmark `--impl` modes, zero runs, zero
 repeats, a repeat benchmark, zero frames, a missing option value and an unknown
-option.
+option. `ctest -L unit` runs the two doctest binaries, `ctest -L cli` runs the
+command line checks and `ctest -L bench` runs the benchmark modes.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public

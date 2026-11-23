@@ -153,6 +153,15 @@ if(BUILD_TESTING)
     COMMAND orderbook replay ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/sample.csv --impl all)
   set_tests_properties(replay_all PROPERTIES
     PASS_REGULAR_EXPRESSION "map, array and pool agree")
+
+  set_tests_properties(book pool PROPERTIES LABELS "unit")
+  set_tests_properties(
+    cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
+    cli_missing_value cli_unknown_option cli_help cli_version
+    cli_replay_sample replay_array replay_pool replay_all
+    PROPERTIES LABELS "cli")
+  set_tests_properties(bench_map bench_array bench_pool bench_both
+    PROPERTIES LABELS "cli;bench")
 endif()
 
 option(ORDERBOOK_BUILD_FUZZERS "Build the libFuzzer targets (Clang only)" OFF)
