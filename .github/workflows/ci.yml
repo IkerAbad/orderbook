@@ -28,6 +28,17 @@ jobs:
       - name: Install
         run: cmake --install build --prefix install
 
+      - name: Build a consumer
+        shell: bash
+        run: |
+          cmake -S examples/consumer -B consumer-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install"
+          cmake --build consumer-build
+          exe=./consumer-build/consumer
+          if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+          "$exe"
+
       - name: Generate a trace and replay it
         shell: bash
         run: |

@@ -18,7 +18,8 @@
 - CMake presets for release, debug, clang, AddressSanitizer,
   UndefinedBehaviorSanitizer, coverage and libFuzzer.
 - Install rules and a `find_package(orderbook 0.2 CONFIG REQUIRED)` package
-  exporting `orderbook::orderbook_core`.
+  exporting `orderbook::orderbook_core`, with a consumer project built against
+  an installed tree in CI.
 - `--help` and `--version` in the CLI.
 - `--repeat` in the benchmark, with min, median and max over the repeats.
 - Independent reference model used by both differential tests.

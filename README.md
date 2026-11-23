@@ -240,7 +240,8 @@ target_link_libraries(app PRIVATE orderbook::orderbook_core)
 ```
 
 Set `-DBUILD_TESTING=OFF` to skip the tests when the project is included as a
-subdirectory or packaged.
+subdirectory or packaged. The `examples/consumer` project is built against an
+installed tree in CI.
 
 ## Project layout
 
@@ -250,6 +251,7 @@ include/orderbook/  public headers
 src/                library sources and the CLI
 tests/              doctest suites, reference model and header self-checks
 fuzz/               libFuzzer targets and seed corpora
+examples/consumer/  consumer built with find_package
 tools/              depth visualizer
 ```
 
