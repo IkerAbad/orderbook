@@ -25,7 +25,8 @@
 - `--impl` in `replay`, with an agreement check when several implementations
   run.
 - Independent reference model used by both differential tests.
-- Header self-checks, move-only book semantics and `noexcept` query methods.
+- Header self-checks, move-only book semantics and `noexcept` query methods and
+  moves.
 
 ### Fixed
 

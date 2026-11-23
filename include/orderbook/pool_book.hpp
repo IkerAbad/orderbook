@@ -26,8 +26,8 @@ public:
 
     PoolBook(const PoolBook&) = delete;
     PoolBook& operator=(const PoolBook&) = delete;
-    PoolBook(PoolBook&&) = default;
-    PoolBook& operator=(PoolBook&&) = default;
+    PoolBook(PoolBook&&) noexcept = default;
+    PoolBook& operator=(PoolBook&&) noexcept = default;
 
     // max_orders is the number of orders that can rest at the same time. Adding
     // one more throws std::overflow_error.

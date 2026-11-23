@@ -23,8 +23,8 @@ public:
 
     ArrayBook(const ArrayBook&) = delete;
     ArrayBook& operator=(const ArrayBook&) = delete;
-    ArrayBook(ArrayBook&&) = default;
-    ArrayBook& operator=(ArrayBook&&) = default;
+    ArrayBook(ArrayBook&&) noexcept = default;
+    ArrayBook& operator=(ArrayBook&&) noexcept = default;
 
     ArrayBook(Price min_price, Price max_price, TradeCallback on_trade = {});
 

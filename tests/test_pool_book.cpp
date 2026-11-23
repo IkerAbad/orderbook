@@ -687,16 +687,22 @@ TEST_CASE("books are movable but not copyable") {
     static_assert(!std::is_copy_assignable_v<ob::Book>);
     static_assert(std::is_move_constructible_v<ob::Book>);
     static_assert(std::is_move_assignable_v<ob::Book>);
+    static_assert(std::is_nothrow_move_constructible_v<ob::Book>);
+    static_assert(std::is_nothrow_move_assignable_v<ob::Book>);
 
     static_assert(!std::is_copy_constructible_v<ob::ArrayBook>);
     static_assert(!std::is_copy_assignable_v<ob::ArrayBook>);
     static_assert(std::is_move_constructible_v<ob::ArrayBook>);
     static_assert(std::is_move_assignable_v<ob::ArrayBook>);
+    static_assert(std::is_nothrow_move_constructible_v<ob::ArrayBook>);
+    static_assert(std::is_nothrow_move_assignable_v<ob::ArrayBook>);
 
     static_assert(!std::is_copy_constructible_v<ob::PoolBook>);
     static_assert(!std::is_copy_assignable_v<ob::PoolBook>);
     static_assert(std::is_move_constructible_v<ob::PoolBook>);
     static_assert(std::is_move_assignable_v<ob::PoolBook>);
+    static_assert(std::is_nothrow_move_constructible_v<ob::PoolBook>);
+    static_assert(std::is_nothrow_move_assignable_v<ob::PoolBook>);
 
     ob::Book map_book;
     map_book.add_limit(ob::Side::Buy, 100, 5);

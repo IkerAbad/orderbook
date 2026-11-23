@@ -27,8 +27,8 @@ public:
 
     Book(const Book&) = delete;
     Book& operator=(const Book&) = delete;
-    Book(Book&&) = default;
-    Book& operator=(Book&&) = default;
+    Book(Book&&) noexcept = default;
+    Book& operator=(Book&&) noexcept = default;
 
     explicit Book(TradeCallback on_trade = {});
 

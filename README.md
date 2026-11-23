@@ -283,7 +283,8 @@ with threads measures the scheduler as much as the book.
 
 **Books move, they do not copy.** A copy would duplicate every order and, in
 `Book` and `ArrayBook`, leave the id index pointing at the original list nodes.
-Copy and assignment are deleted. Move is defaulted and keeps the nodes alive.
+Copy and assignment are deleted. Move is defaulted, keeps the nodes alive and is
+noexcept.
 
 ## Limitations
 
