@@ -347,10 +347,10 @@ CI runs the tests on Linux and Windows with GCC and MSVC, on Linux with Clang,
 and under AddressSanitizer and UndefinedBehaviorSanitizer on Ubuntu. GCC and
 Clang also build with `-Wconversion` and `-Wsign-conversion`. GCC adds its
 duplicated-condition, logical-op, useless-cast and cast-qual warnings. Warnings
-are errors in every compiler job. Both build jobs also install the package,
-build `examples/consumer` against it and compile a tree with
-`BUILD_TESTING=OFF`. A separate job checks that line coverage of the library
-sources stays at or above 90 %.
+are errors in every compiler job. Both build jobs also install the package, run
+the installed CLI, build `examples/consumer` against the installation and
+compile a tree with `BUILD_TESTING=OFF`. A separate job checks that line
+coverage of the library sources stays at or above 90 %.
 
 ## Fuzzing
 

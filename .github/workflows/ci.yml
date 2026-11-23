@@ -28,6 +28,13 @@ jobs:
       - name: Install
         run: cmake --install build --prefix install
 
+      - name: Run the installed CLI
+        shell: bash
+        run: |
+          exe=./install/bin/orderbook
+          if [ -f "$exe.exe" ]; then exe="$exe.exe"; fi
+          "$exe" --version
+
       - name: Build a consumer
         shell: bash
         run: |
