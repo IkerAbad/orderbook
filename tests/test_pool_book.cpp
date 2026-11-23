@@ -624,6 +624,36 @@ TEST_CASE("parse_csv works on a string") {
     CHECK_THROWS_AS(ob::parse_csv("wrong\n"), std::runtime_error);
 }
 
+TEST_CASE("market and modify no-ops") {
+    ob::Book map_book;
+    const ob::OrderId map_id = map_book.add_limit(ob::Side::Buy, 100, 5);
+    CHECK(map_book.add_market(ob::Side::Buy, 0) == 0);
+    CHECK(map_book.order_count() == 1);
+    CHECK(map_book.modify(map_id, 100, 5));
+    CHECK(map_book.quantity_at(ob::Side::Buy, 100) == 5);
+    CHECK(map_book.order_count() == 1);
+
+    ob::ArrayBook array_book(100, 200);
+    const ob::OrderId array_id = array_book.add_limit(ob::Side::Buy, 150, 5);
+    CHECK(array_book.add_market(ob::Side::Sell, 0) == 0);
+    CHECK(array_book.order_count() == 1);
+    CHECK(array_book.modify(array_id, 150, 5));
+    CHECK(array_book.quantity_at(ob::Side::Buy, 150) == 5);
+    CHECK(array_book.order_count() == 1);
+
+    ob::PoolBook pool_book(100, 200, 4);
+    const ob::OrderId pool_id = pool_book.add_limit(ob::Side::Buy, 150, 5);
+    CHECK(pool_book.add_market(ob::Side::Buy, 0) == 0);
+    CHECK(pool_book.order_count() == 1);
+    CHECK(pool_book.modify(pool_id, 150, 5));
+    CHECK(pool_book.quantity_at(ob::Side::Buy, 150) == 5);
+    CHECK(pool_book.order_count() == 1);
+
+    CHECK_THROWS_AS(array_book.modify(array_id, 50, 5), std::out_of_range);
+    CHECK(array_book.order_count() == 1);
+    CHECK(array_book.quantity_at(ob::Side::Buy, 150) == 5);
+}
+
 TEST_CASE("queries are noexcept") {
     ob::Book map_book;
     ob::ArrayBook array_book(100, 200);
