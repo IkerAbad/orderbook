@@ -83,6 +83,16 @@ if(BUILD_TESTING)
   set_tests_properties(cli_zero_runs PROPERTIES
     PASS_REGULAR_EXPRESSION "--runs must be at least 1")
 
+  add_test(NAME cli_zero_repeat
+    COMMAND orderbook bench --events 10 --seed 1 --runs 1 --repeat 0 --impl all)
+  set_tests_properties(cli_zero_repeat PROPERTIES
+    PASS_REGULAR_EXPRESSION "--repeat must be at least 1")
+
+  add_test(NAME cli_repeat
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --repeat 2 --impl all)
+  set_tests_properties(cli_repeat PROPERTIES
+    PASS_REGULAR_EXPRESSION "median")
+
   add_test(NAME cli_missing_value
     COMMAND orderbook bench --events)
   set_tests_properties(cli_missing_value PROPERTIES

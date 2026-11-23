@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -28,7 +29,7 @@ void usage() {
         "  orderbook --help\n"
         "  orderbook generate --events N --seed S --out FILE\n"
         "  orderbook replay FILE\n"
-        "  orderbook bench --events N --seed S [--runs R] [--impl map|array|pool|both|all]\n"
+        "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--impl map|array|pool|both|all]\n"
         "  orderbook depth --events N --seed S --frames K --out FILE\n";
 }
 
@@ -163,9 +164,79 @@ BenchResult bench_impl(const std::vector<ob::TraceEvent>& trace, int runs, Facto
     return best;
 }
 
-int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::string& impl) {
+struct ImplSelection {
+    bool map{};
+    bool array{};
+    bool pool{};
+};
+
+ImplSelection select_impl(const std::string& impl) {
+    return ImplSelection{
+        impl == "map" || impl == "both" || impl == "all",
+        impl == "array" || impl == "both" || impl == "all",
+        impl == "pool" || impl == "all",
+    };
+}
+
+struct BenchSet {
+    BenchResult map{};
+    BenchResult array{};
+    BenchResult pool{};
+};
+
+BenchSet run_bench_set(const std::vector<ob::TraceEvent>& trace, int runs,
+                       const ImplSelection& selection, ob::Price lo, ob::Price hi,
+                       std::size_t limit_events) {
+    BenchSet set;
+
+    if (selection.map) {
+        set.map = bench_impl<ob::Book>(
+            trace, runs, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
+    }
+    if (selection.array) {
+        set.array = bench_impl<ob::ArrayBook>(
+            trace, runs, [lo, hi](ob::ArrayBook::TradeCallback cb) {
+                return ob::ArrayBook(lo, hi, std::move(cb));
+            });
+    }
+    if (selection.pool) {
+        set.pool = bench_impl<ob::PoolBook>(
+            trace, runs, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
+                return ob::PoolBook(lo, hi, limit_events, std::move(cb));
+            });
+    }
+
+    const auto mismatch = [](const BenchResult& a, const BenchResult& b) {
+        return a.trades != b.trades || a.volume != b.volume;
+    };
+    if ((selection.map && selection.array && mismatch(set.map, set.array)) ||
+        (selection.map && selection.pool && mismatch(set.map, set.pool)) ||
+        (selection.array && selection.pool && mismatch(set.array, set.pool))) {
+        throw std::runtime_error(
+            "benchmark implementations disagree on trades or volume");
+    }
+    return set;
+}
+
+void print_stats(const char* name, std::vector<double> values, std::uint64_t trades) {
+    std::sort(values.begin(), values.end());
+    const std::size_t n = values.size();
+    const double middle =
+        n % 2 == 1 ? values[n / 2] : (values[n / 2 - 1] + values[n / 2]) / 2.0;
+
+    std::cout << name << "min " << values.front() << "  median " << middle
+              << "  max " << values.back() << " ns/event   " << trades
+              << " trades\n";
+}
+
+int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
+              const std::string& impl) {
     if (runs < 1) {
         std::cerr << "--runs must be at least 1\n";
+        return 1;
+    }
+    if (repeat < 1) {
+        std::cerr << "--repeat must be at least 1\n";
         return 1;
     }
 
@@ -174,11 +245,8 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
     options.seed = seed;
 
     const auto trace = ob::generate(options);
-
-    const bool want_map = impl == "map" || impl == "both" || impl == "all";
-    const bool want_array = impl == "array" || impl == "both" || impl == "all";
-    const bool want_pool = impl == "pool" || impl == "all";
-    if (!want_map && !want_array && !want_pool) {
+    const ImplSelection selection = select_impl(impl);
+    if (!selection.map && !selection.array && !selection.pool) {
         std::cerr << "--impl must be map, array, pool, both or all\n";
         return 1;
     }
@@ -212,60 +280,65 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, const std::str
     std::cout << "workload  " << trace.size() << " events, seed " << seed
               << ", ladder [" << lo << ", " << hi << "]\n";
 
-    BenchResult map_result{};
-    BenchResult array_result{};
-    BenchResult pool_result{};
-    bool have_map = false;
-    bool have_array = false;
-    bool have_pool = false;
+    if (repeat == 1) {
+        const BenchSet set =
+            run_bench_set(trace, runs, selection, lo, hi, limit_events);
 
-    if (want_map) {
-        map_result = bench_impl<ob::Book>(
-            trace, runs, [](ob::Book::TradeCallback cb) { return ob::Book(std::move(cb)); });
-        have_map = true;
+        const auto print = [](const char* name, const BenchResult& r) {
+            std::cout << name << r.ns_per_event << " ns/event   "
+                      << static_cast<std::uint64_t>(r.events_per_second)
+                      << " events/s   " << r.trades << " trades\n";
+        };
+
+        if (selection.map) {
+            print("map    ", set.map);
+        }
+        if (selection.array) {
+            print("array  ", set.array);
+        }
+        if (selection.pool) {
+            print("pool   ", set.pool);
+        }
+    } else {
+        std::vector<double> map_ns;
+        std::vector<double> array_ns;
+        std::vector<double> pool_ns;
+        std::uint64_t trades = 0;
+
+        for (int r = 0; r < repeat; ++r) {
+            const BenchSet set =
+                run_bench_set(trace, runs, selection, lo, hi, limit_events);
+            if (selection.map) {
+                map_ns.push_back(set.map.ns_per_event);
+            }
+            if (selection.array) {
+                array_ns.push_back(set.array.ns_per_event);
+            }
+            if (selection.pool) {
+                pool_ns.push_back(set.pool.ns_per_event);
+            }
+            if (selection.map) {
+                trades = set.map.trades;
+            } else if (selection.array) {
+                trades = set.array.trades;
+            } else {
+                trades = set.pool.trades;
+            }
+        }
+
+        std::cout << std::fixed << std::setprecision(1);
+        if (selection.map) {
+            print_stats("map    ", map_ns, trades);
+        }
+        if (selection.array) {
+            print_stats("array  ", array_ns, trades);
+        }
+        if (selection.pool) {
+            print_stats("pool   ", pool_ns, trades);
+        }
     }
 
-    if (want_array) {
-        array_result = bench_impl<ob::ArrayBook>(
-            trace, runs, [lo, hi](ob::ArrayBook::TradeCallback cb) {
-                return ob::ArrayBook(lo, hi, std::move(cb));
-            });
-        have_array = true;
-    }
-
-    if (want_pool) {
-        pool_result = bench_impl<ob::PoolBook>(
-            trace, runs, [lo, hi, limit_events](ob::PoolBook::TradeCallback cb) {
-                return ob::PoolBook(lo, hi, limit_events, std::move(cb));
-            });
-        have_pool = true;
-    }
-
-    const auto mismatch = [](const BenchResult& a, const BenchResult& b) {
-        return a.trades != b.trades || a.volume != b.volume;
-    };
-    if ((have_map && have_array && mismatch(map_result, array_result)) ||
-        (have_map && have_pool && mismatch(map_result, pool_result)) ||
-        (have_array && have_pool && mismatch(array_result, pool_result))) {
-        std::cerr << "benchmark implementations disagree on trades or volume\n";
-        return 1;
-    }
-
-    const auto print = [](const char* name, const BenchResult& r) {
-        std::cout << name << r.ns_per_event << " ns/event   "
-                  << static_cast<std::uint64_t>(r.events_per_second) << " events/s   "
-                  << r.trades << " trades\n";
-    };
-
-    if (have_map) {
-        print("map    ", map_result);
-    }
-    if (have_array) {
-        print("array  ", array_result);
-    }
-    if (have_pool) {
-        print("pool   ", pool_result);
-
+    if (selection.pool) {
         const ob::PoolBook probe(lo, hi, limit_events);
         const double mib =
             static_cast<double>(probe.memory_bytes()) / (1024.0 * 1024.0);
@@ -347,6 +420,7 @@ int main(int argc, char** argv) {
     std::uint64_t events = 1'000'000;
     std::uint64_t seed = 42;
     int runs = 3;
+    int repeat = 1;
     std::size_t frames = 60;
     std::string out;
     std::string input;
@@ -368,6 +442,8 @@ int main(int argc, char** argv) {
                 seed = std::stoull(value("--seed"));
             } else if (arg == "--runs") {
                 runs = std::stoi(value("--runs"));
+            } else if (arg == "--repeat") {
+                repeat = std::stoi(value("--repeat"));
             } else if (arg == "--frames") {
                 frames = std::stoull(value("--frames"));
             } else if (arg == "--out") {
@@ -403,7 +479,7 @@ int main(int argc, char** argv) {
             return run_replay(input);
         }
         if (command == "bench") {
-            return run_bench(events, seed, runs, impl);
+            return run_bench(events, seed, runs, repeat, impl);
         }
         if (command == "depth") {
             if (out.empty()) {

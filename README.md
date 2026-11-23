@@ -58,23 +58,23 @@ after construction. `depth` allocates its result vector.
 ## Benchmark
 
 ```
-$ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
+$ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 10 --impl all
 workload  1000000 events, seed 42, ladder [9809, 10339]
-map    147.890 ns/event   6761800 events/s   457777 trades
-array  122.872 ns/event   8138530 events/s   457777 trades
-pool    44.1967 ns/event   22626123 events/s   457777 trades
-pool memory  36.8122 MiB, 650012 slots
+map    min 136.6  median 142.6  max 163.6 ns/event   457777 trades
+array  min 117.3  median 122.5  max 143.1 ns/event   457777 trades
+pool   min 41.8  median 52.3  max 57.7 ns/event   457777 trades
+pool memory  36.8 MiB, 650012 slots
 ```
 
 Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
-single thread, best of three runs. On this run `PoolBook` is 3.3 times faster
-than `Book` and 2.8 times faster than `ArrayBook`. Ten consecutive runs of the
-same command gave 140.4-156.7 ns/event for `map`, 120.8-136.6 for `array` and
-41.0-49.1 for `pool`. The pool line is followed by the memory reserved for its
-vectors: 36.8 MiB for 650,012 slots and the id table. The trace itself is not
-included. When more than one implementation runs, the command also checks that
-they produced the same trade count and volume before printing. A mismatch fails
-the run.
+single thread. Each repeat is the best of three runs and the table summarises
+ten repeats. Using the medians, `PoolBook` is 2.7 times faster than `Book` and
+2.3 times faster than `ArrayBook`. The min and max columns show the spread of
+this machine. The pool line is followed by the memory reserved for its vectors:
+36.8 MiB for 650,012 slots and the id table. The trace itself is not included.
+When more than one implementation runs, the command also checks that they
+produced the same trade count and volume before printing. A mismatch fails the
+run.
 
 The workload comes from the same binary:
 
@@ -92,16 +92,16 @@ explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 25.0 ns/event, 16.9 % of the map time. Price-level
+- `map` to `array` saves 20.1 ns/event, 14.1 % of the map median. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 78.7 ns/event, 64.0 % of the array time. A resting
+- `array` to `pool` saves 70.2 ns/event, 57.3 % of the array median. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
-- The second change is about 3.1 times larger than the first. That is the
+- The second change is about 3.5 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
   paid the per-order allocation, and 65 % of the events are limit orders.
-- The remaining 44 ns/event are the match loop, the callback, the trade
+- The remaining 52 ns/event are the match loop, the callback, the trade
   counters, the id hash and ordinary branch and cache misses. This build does
   not profile them further.
 
@@ -186,6 +186,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 
 # compare the three implementations
 ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --impl all
+
+# ten repeats with min, median and max
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 10 --impl all
 
 # export depth snapshots for the plot
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
@@ -323,8 +326,9 @@ Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Seven CLI checks cover `--help`, `--version`, a golden replay,
-zero runs, zero frames, a missing option value and an unknown option.
+executed volume. Nine CLI checks cover `--help`, `--version`, a golden replay,
+zero runs, zero repeats, a repeat benchmark, zero frames, a missing option value
+and an unknown option.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public
@@ -368,9 +372,9 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 3,3 veces más rápido que la versión
-con `std::map` y 2,8 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 25,0 ns por evento. El cambio de array a pool ahorra 78,7
+Sobre un millón de eventos, `PoolBook` es 2,7 veces más rápido que la versión
+con `std::map` y 2,3 veces más rápido que la versión con array. El cambio de
+`map` a array ahorra 20,1 ns por evento. El cambio de array a pool ahorra 70,2
 ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
 por cada orden. Esa era la parte que impedía que el array destacara.
 

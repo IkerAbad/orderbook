@@ -20,6 +20,7 @@
 - Install rules and a `find_package(orderbook 0.2 CONFIG REQUIRED)` package
   exporting `orderbook::orderbook_core`.
 - `--help` and `--version` in the CLI.
+- `--repeat` in the benchmark, with min, median and max over the repeats.
 - Independent reference model used by both differential tests.
 - Header self-checks, move-only book semantics and `noexcept` query methods.
 
@@ -44,7 +45,7 @@
 
 ### Tests and CI
 
-- 50 doctest cases, 7 CLI checks and 9 CTest entries.
+- 50 doctest cases, 9 CLI checks and 11 CTest entries.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.
 - CI runs GCC and MSVC on Linux and Windows, Clang on Linux, ASan and UBSan on
