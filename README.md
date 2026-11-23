@@ -90,6 +90,7 @@ prices, sizes, timestamps and aggressor side are preserved. The book is flat
 between trades.
 
 ```
+$ mkdir -p data
 $ zstd -d benchmarks/btcusdt-2026-11-22.csv.zst -o data/btcusdt-2026-11-22.csv
 $ ./build/orderbook bench --trace data/btcusdt-2026-11-22.csv --runs 3 --repeat 10 --impl all
 workload  2007982 events, trace data/btcusdt-2026-11-22.csv, ladder [5876751, 6167099]

@@ -55,6 +55,7 @@ python tools/trace_report.py \
 ## Verify and run
 
 ```bash
+mkdir -p data
 zstd -d benchmarks/btcusdt-2026-11-22.csv.zst -o data/btcusdt-2026-11-22.csv
 sha256sum data/btcusdt-2026-11-22.csv
 
