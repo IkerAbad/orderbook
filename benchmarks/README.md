@@ -21,8 +21,8 @@ The daily archive was used because the local `market-data-service` records live
 data and was not running for the whole day. `binance_archive_to_parquet.py`
 writes the archive with the same Arrow schema and
 `trades/symbol=.../date=...` layout as the service. The converter was also run
-against a live service capture, 27 Parquet files from 2026-11-23, and the
-replay agreed across all three books.
+against a live service capture, 27 Parquet files from 2026-11-23, on a
+1,000-trade slice, and the replay agreed across all three books.
 
 ## Files
 
