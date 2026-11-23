@@ -93,6 +93,27 @@ if(BUILD_TESTING)
   set_tests_properties(cli_repeat PROPERTIES
     PASS_REGULAR_EXPRESSION "median")
 
+  add_test(NAME bench_map
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --impl map)
+  set_tests_properties(bench_map PROPERTIES
+    PASS_REGULAR_EXPRESSION "map    ")
+
+  add_test(NAME bench_array
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --impl array)
+  set_tests_properties(bench_array PROPERTIES
+    PASS_REGULAR_EXPRESSION "array  ")
+
+  add_test(NAME bench_pool
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --impl pool)
+  set_tests_properties(bench_pool PROPERTIES
+    PASS_REGULAR_EXPRESSION "pool   ")
+
+  add_test(NAME bench_both
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --impl both)
+  set_tests_properties(bench_both PROPERTIES
+    PASS_REGULAR_EXPRESSION "array  "
+    FAIL_REGULAR_EXPRESSION "pool   ")
+
   add_test(NAME cli_missing_value
     COMMAND orderbook bench --events)
   set_tests_properties(cli_missing_value PROPERTIES
