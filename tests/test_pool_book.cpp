@@ -604,6 +604,33 @@ TEST_CASE("a crossing limit can rest after freeing pool slots") {
     CHECK(book.best_ask() == std::nullopt);
 }
 
+TEST_CASE("generator honours the workload weights") {
+    ob::GeneratorOptions options{};
+    options.events = 1'000;
+
+    options.limit_percent = 100;
+    options.cancel_percent = 0;
+    auto trace = ob::generate(options);
+    REQUIRE(trace.size() == 1'000);
+    CHECK(std::all_of(trace.begin(), trace.end(),
+                      [](const ob::TraceEvent& e) { return e.op == 'L'; }));
+
+    options.limit_percent = 0;
+    options.cancel_percent = 0;
+    trace = ob::generate(options);
+    REQUIRE(trace.size() == 1'000);
+    CHECK(std::all_of(trace.begin(), trace.end(),
+                      [](const ob::TraceEvent& e) { return e.op == 'M'; }));
+
+    options.limit_percent = 70;
+    options.cancel_percent = 40;
+    CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
+
+    options.limit_percent = -1;
+    options.cancel_percent = 0;
+    CHECK_THROWS_AS(ob::generate(options), std::invalid_argument);
+}
+
 TEST_CASE("generator rejects a mid that leaves no room for the drift") {
     ob::GeneratorOptions options{};
     options.events = 1000;

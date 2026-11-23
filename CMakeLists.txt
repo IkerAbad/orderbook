@@ -181,12 +181,42 @@ if(BUILD_TESTING)
       -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_generate.cmake)
   set_tests_properties(cli_generate_reproducible PROPERTIES LABELS "cli")
 
+  add_test(NAME cli_bad_workload
+    COMMAND orderbook generate --events 10 --seed 1 --workload nope
+            --out ${CMAKE_CURRENT_BINARY_DIR}/bad_workload.csv)
+  set_tests_properties(cli_bad_workload PROPERTIES
+    PASS_REGULAR_EXPRESSION "--workload must be mixed, limits, cancels or markets")
+
+  add_test(NAME cli_workload_limits
+    COMMAND orderbook generate --events 100 --seed 1 --workload limits
+            --out ${CMAKE_CURRENT_BINARY_DIR}/workload_limits.csv)
+  set_tests_properties(cli_workload_limits PROPERTIES
+    PASS_REGULAR_EXPRESSION "100 limit, 0 cancel, 0 market")
+
+  add_test(NAME bench_workload_limits
+    COMMAND orderbook bench --events 100 --seed 1 --runs 1 --workload limits --impl pool)
+  set_tests_properties(bench_workload_limits PROPERTIES
+    PASS_REGULAR_EXPRESSION "limits")
+
+  add_test(NAME cli_zero_levels
+    COMMAND orderbook depth --events 10 --seed 1 --frames 1 --levels 0
+            --out ${CMAKE_CURRENT_BINARY_DIR}/zero_levels.csv)
+  set_tests_properties(cli_zero_levels PROPERTIES
+    PASS_REGULAR_EXPRESSION "--levels must be at least 1")
+
+  add_test(NAME depth_levels
+    COMMAND orderbook depth --events 100 --seed 1 --frames 1 --levels 3
+            --out ${CMAKE_CURRENT_BINARY_DIR}/depth_levels.csv)
+  set_tests_properties(depth_levels PROPERTIES
+    PASS_REGULAR_EXPRESSION "wrote 1 frames")
+
   set_tests_properties(
     cli_zero_frames cli_zero_runs cli_zero_repeat cli_repeat
     cli_missing_value cli_unknown_option cli_help cli_version
     cli_replay_sample replay_array replay_pool replay_all depth_all
+    cli_bad_workload cli_workload_limits cli_zero_levels depth_levels
     PROPERTIES LABELS "cli")
-  set_tests_properties(bench_map bench_array bench_pool bench_both
+  set_tests_properties(bench_map bench_array bench_pool bench_both bench_workload_limits
     PROPERTIES LABELS "cli;bench")
   endif()
 endif()
@@ -254,4 +284,12 @@ set(CPACK_PACKAGE_FILE_NAME
     "orderbook-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_GENERATOR "ZIP;TGZ")
+set(CPACK_SOURCE_GENERATOR "ZIP;TGZ")
+set(CPACK_SOURCE_IGNORE_FILES
+    "/build[^/]*/"
+    "/[.]git/"
+    "/[.]github/"
+    "/venv/"
+    "/data/"
+    "__pycache__/")
 include(CPack)

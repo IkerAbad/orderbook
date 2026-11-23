@@ -21,9 +21,12 @@
 - Install rules and a `find_package(orderbook 0.2 CONFIG REQUIRED)` package
   exporting `orderbook::orderbook_core`, with a consumer project built against
   an installed tree in CI.
-- ZIP and TGZ packages built with CPack.
+- Binary and source ZIP/TGZ packages built with CPack.
 - `--help` and `--version` in the CLI.
 - `--repeat` in the benchmark, with min, median and max over the repeats.
+- `--workload mixed|limits|cancels|markets` for the generator, benchmark and
+  depth commands.
+- `--levels` in `depth` to choose how many price levels are exported.
 - `--impl` in `replay`, with an agreement check when several implementations
   run.
 - `--impl` in `depth`, with a byte-for-byte comparison of the generated CSV
@@ -56,7 +59,7 @@
 
 ### Tests and CI
 
-- 54 doctest cases, 19 CLI checks and 21 CTest entries.
+- 55 doctest cases, 24 CLI checks and 26 CTest entries.
 - CTest labels `unit`, `cli` and `bench` for selective runs.
 - Differential tests cover 20,000 generated events and 5,000 random operations
   with modifies, against the three books and the reference model.

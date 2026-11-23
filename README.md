@@ -59,49 +59,80 @@ after construction. `depth` allocates its result vector.
 
 ```
 $ ./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 10 --impl all
-workload  1000000 events, seed 42, ladder [9809, 10339]
-map    min 136.6  median 142.6  max 163.6 ns/event   457777 trades
-array  min 117.3  median 122.5  max 143.1 ns/event   457777 trades
-pool   min 41.8  median 52.3  max 57.7 ns/event   457777 trades
+workload  1000000 events, seed 42, mixed, ladder [9809, 10339]
+map    min 148.1  median 156.7  max 173.4 ns/event   457777 trades
+array  min 124.6  median 133.5  max 147.7 ns/event   457777 trades
+pool   min 46.8  median 51.2  max 61.1 ns/event   457777 trades
 pool memory  36.8 MiB, 650012 slots
 ```
 
 Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
 single thread. Each repeat is the best of three runs and the table summarises
-ten repeats. Using the medians, `PoolBook` is 2.7 times faster than `Book` and
-2.3 times faster than `ArrayBook`. The min and max columns show the spread of
+ten repeats. Using the medians, `PoolBook` is 3.1 times faster than `Book` and
+2.6 times faster than `ArrayBook`. The min and max columns show the spread of
 this machine. The pool line is followed by the memory reserved for its vectors:
 36.8 MiB for 650,012 slots and the id table. The trace itself is not included.
 When more than one implementation runs, the command also checks that they
 produced the same trade count and volume before printing. A mismatch fails the
 run.
 
-The workload comes from the same binary:
+### Workloads
+
+`--workload` selects the generator mix:
+
+| Workload | limit | cancel | market |
+|---|---|---|---|
+| `mixed` | 65 | 20 | 15 |
+| `limits` | 100 | 0 | 0 |
+| `cancels` | 50 | 50 | 0 |
+| `markets` | 50 | 0 | 50 |
+
+A cancel with no live id becomes a market order, so the counts printed by
+`generate` can differ slightly.
+
+Medians for the other workloads with `--repeat 5`. The `mixed` row is the
+ten-repeat run above.
+
+| Workload | `map` | `array` | `pool` |
+|---|---|---|---|
+| `mixed` | 156.7 | 133.5 | 51.2 |
+| `limits` | 201.2 | 190.2 | 89.1 |
+| `cancels` | 91.2 | 62.0 | 36.2 |
+| `markets` | 92.7 | 70.3 | 41.5 |
+
+```
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 5 --workload limits --impl all
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 5 --workload cancels --impl all
+./build/orderbook bench --events 1000000 --seed 42 --runs 3 --repeat 5 --workload markets --impl all
+```
+
+The default `mixed` workload comes from the same binary:
 
 ```
 $ ./build/orderbook generate --events 1000000 --seed 42 --out trace.csv
 wrote 1000000 events to trace.csv (650012 limit, 199987 cancel, 150001 market)
 ```
 
-The generator draws 65 % limit orders, 20 % cancels and 15 % market orders. It
-assigns an id to every limit and market order, so the cancel ids stay aligned
-with the book. It does not know which orders the book has filled, so some cancel
-events reference orders that already executed and the book rejects them. The
-rare event where the generator has no id left becomes a market order, which
-explains the small drift from the exact percentages.
+The generator draws 65 % limit orders, 20 % cancels and 15 % market orders by
+default. It assigns an id to every limit and market order, so the cancel ids
+stay aligned with the book. It does not know which orders the book has filled,
+so some cancel events reference orders that already executed and the book
+rejects them. The rare event where the generator has no id left becomes a market
+order, which explains the small drift from the exact percentages.
 
 ### Where the time goes
 
-- `map` to `array` saves 20.1 ns/event, 14.1 % of the map median. Price-level
+- `map` to `array` saves 23.2 ns/event, 14.8 % of the map median. Price-level
   lookup stops walking a red-black tree and stops allocating a node for every
   new price.
-- `array` to `pool` saves 70.2 ns/event, 57.3 % of the array median. A resting
+- `array` to `pool` saves 82.3 ns/event, 61.6 % of the array median. A resting
   limit order stops allocating a `std::list` node and an `unordered_map` node,
   and matching stops chasing two pointers per order.
 - The second change is about 3.5 times larger than the first. That is the
   measured answer to why the array alone did not stand out: both earlier books
-  paid the per-order allocation, and 65 % of the events are limit orders.
-- The remaining 52 ns/event are the match loop, the callback, the trade
+  paid the per-order allocation, and 65 % of the events are limit orders in the
+  mixed workload.
+- The remaining 51 ns/event are the match loop, the callback, the trade
   counters, the id hash and ordinary branch and cache misses. This build does
   not profile them further.
 
@@ -187,6 +218,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # write a synthetic session to CSV
 ./build/orderbook generate --events 100000 --seed 7 --out trace.csv
 
+# write a limit-only session
+./build/orderbook generate --events 100000 --seed 7 --workload limits --out trace.csv
+
 # replay it and print the final state of the book
 ./build/orderbook replay trace.csv
 
@@ -202,6 +236,9 @@ CI fails if line coverage of the library sources drops below 90 %.
 # export depth snapshots for the plot
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv
 python tools/visualize.py --input depth.csv --png docs/depth.png --gif docs/depth.gif
+
+# export five levels per side
+./build/orderbook depth --events 200000 --seed 7 --frames 60 --levels 5 --out depth.csv
 
 # check that every implementation produces the same depth CSV
 ./build/orderbook depth --events 200000 --seed 7 --frames 60 --out depth.csv --impl all
@@ -267,7 +304,12 @@ cpack -G ZIP
 ```
 
 The archive contains the library, the headers, the CLI, the CMake package and
-the documentation.
+the documentation. A source archive is also available:
+
+```
+cd build
+cpack --config CPackSourceConfig.cmake -G TGZ
+```
 
 ## Project layout
 
@@ -331,39 +373,40 @@ noexcept.
 
 ## Tests
 
-54 cases. The original 19 stay unchanged and cover priority rules, partial
+55 cases. The original 19 stay unchanged and cover priority rules, partial
 fills, market orders walking several levels, cancel and modify semantics, the
 spread invariant under a random workload, trace reproducibility and the array
 ladder range. Running `./build/orderbook_tests` reports those 19 cases.
 
-The 35 new cases cover the pool and the edges around it: slot reuse, a middle
+The 36 new cases cover the pool and the edges around it: slot reuse, a middle
 cancel that must not break the intrusive list, 1000 full pool cycles, a full
 pool, invalid ladders and capacities, spans that overflow `Price`, level totals
 that overflow `Quantity`, depth, empty books, zero-depth queries, zero-size
 market orders and modify no-ops, modify crossing the spread, modify fully
 executing, a crossing order that frees pool slots, the memory footprint, noexcept
 queries, move-only book semantics, a three-seed differential, a generator `mid`
-that leaves no room for the drift, and a counter that replaces global
-`operator new` and asserts that 50 rounds of adding, matching, modifying and
-cancelling do not allocate. They also check that every limit and market event
-consumes one id, so the cancels in a generated trace reference the order the
-book actually assigned, and that `parse_csv` works without a file. The CSV
-reader round-trips a generated trace and rejects a bad header, a bad op, a bad
-side, a non-numeric field, a wrong field count and an empty file, and it accepts
-CRLF line endings and a UTF-8 BOM. Running `./build/orderbook_pool_tests`
-reports the 35 new cases.
+that leaves no room for the drift, a generator workload weight check, and a
+counter that replaces global `operator new` and asserts that 50 rounds of
+adding, matching, modifying and cancelling do not allocate. They also check that
+every limit and market event consumes one id, so the cancels in a generated
+trace reference the order the book actually assigned, and that `parse_csv` works
+without a file. The CSV reader round-trips a generated trace and rejects a bad
+header, a bad op, a bad side, a non-numeric field, a wrong field count and an
+empty file, and it accepts CRLF line endings and a UTF-8 BOM. Running
+`./build/orderbook_pool_tests` reports the 36 new cases.
 
 Both differential tests also compare against an independent reference model that
 uses a map of vectors and computes totals on demand. The first runs 20,000
 generated events, the second runs 5,000 random operations with modifies. They
 compare best prices, live orders, level counts, depth, every trade and the
-executed volume. Nineteen CLI checks cover `--help`, `--version`, a reproducible
-generate run, a golden replay through map, array and pool, a depth run through
-all implementations, a byte-for-byte map/pool depth comparison, the four
-benchmark `--impl` modes, zero runs, zero repeats, a repeat benchmark, zero
-frames, a missing option value and an unknown option. `ctest -L unit` runs the
-two doctest binaries, `ctest -L cli` runs the command line checks and
-`ctest -L bench` runs the benchmark modes.
+executed volume. Twenty-four CLI checks cover `--help`, `--version`, a
+reproducible generate run, a golden replay through map, array and pool, a depth
+run through all implementations, a byte-for-byte map/pool depth comparison, the
+four benchmark `--impl` modes, the workload mix, a zero depth limit, the
+invalid-argument cases, a repeat benchmark, zero repeats, a missing option value
+and an unknown option. `ctest -L unit` runs the two doctest binaries,
+`ctest -L cli` runs the command line checks and `ctest -L bench` runs the
+benchmark modes.
 
 An object library compiles `types.hpp`, `book.hpp`, `array_book.hpp`,
 `pool_book.hpp` and `trace.hpp` in separate translation units, so every public
@@ -410,9 +453,9 @@ otra con un array contiguo indexado por tick y una tercera que añade un pool de
 libro. `PoolBook` reserva todo al construirse y enlaza las órdenes con índices
 enteros, así que cancelar y casar no hacen ninguna reserva.
 
-Sobre un millón de eventos, `PoolBook` es 2,7 veces más rápido que la versión
-con `std::map` y 2,3 veces más rápido que la versión con array. El cambio de
-`map` a array ahorra 20,1 ns por evento. El cambio de array a pool ahorra 70,2
+Sobre un millón de eventos, `PoolBook` es 3,1 veces más rápido que la versión
+con `std::map` y 2,6 veces más rápido que la versión con array. El cambio de
+`map` a array ahorra 23,2 ns por evento. El cambio de array a pool ahorra 82,3
 ns por evento, porque elimina la reserva del nodo de lista y del nodo del índice
 por cada orden. Esa era la parte que impedía que el array destacara.
 

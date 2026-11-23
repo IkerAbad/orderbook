@@ -25,6 +25,9 @@ struct GeneratorOptions {
     std::uint64_t seed{42};
     Price mid{10'000};
     Quantity max_quantity{100};
+    // The rest of 100 % becomes market orders.
+    int limit_percent{65};
+    int cancel_percent{20};
 };
 
 std::vector<TraceEvent> generate(const GeneratorOptions& options);

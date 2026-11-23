@@ -62,6 +62,12 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
         throw std::invalid_argument("mid leaves no room for the drift");
     }
 
+    if (options.limit_percent < 0 || options.cancel_percent < 0 ||
+        options.limit_percent + options.cancel_percent > 100) {
+        throw std::invalid_argument(
+            "limit_percent and cancel_percent must be in [0, 100] and sum to at most 100");
+    }
+
     std::mt19937_64 rng(options.seed);
     std::uniform_int_distribution<int> coin(0, 99);
     std::uniform_int_distribution<int> side_pick(0, 1);
@@ -92,14 +98,15 @@ std::vector<TraceEvent> generate(const GeneratorOptions& options) {
 
         const int roll = coin(rng);
 
-        if (roll < 65) {
+        if (roll < options.limit_percent) {
             event.op = 'L';
             event.price = side == Side::Buy ? mid - offset(rng) : mid + offset(rng);
             event.quantity = size(rng);
             event.id = next_id;
             live.push_back(next_id);
             ++next_id;
-        } else if (roll < 85 && !live.empty()) {
+        } else if (roll < options.limit_percent + options.cancel_percent &&
+                   !live.empty()) {
             std::uniform_int_distribution<std::size_t> pick(0, live.size() - 1);
             const std::size_t idx = pick(rng);
             const OrderId id = live[idx];

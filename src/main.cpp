@@ -29,10 +29,10 @@ void usage() {
         "usage:\n"
         "  orderbook --version\n"
         "  orderbook --help\n"
-        "  orderbook generate --events N --seed S --out FILE\n"
+        "  orderbook generate --events N --seed S [--workload mixed|limits|cancels|markets] --out FILE\n"
         "  orderbook replay FILE [--impl map|array|pool|both|all]\n"
-        "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--impl map|array|pool|both|all]\n"
-        "  orderbook depth --events N --seed S --frames K --out FILE [--impl map|array|pool|both|all]\n";
+        "  orderbook bench --events N --seed S [--runs R] [--repeat R] [--workload mixed|limits|cancels|markets] [--impl map|array|pool|both|all]\n"
+        "  orderbook depth --events N --seed S --frames K [--levels K] [--workload mixed|limits|cancels|markets] --out FILE [--impl map|array|pool|both|all]\n";
 }
 
 template <class BookT>
@@ -66,10 +66,34 @@ ImplSelection select_impl(const std::string& impl) {
     };
 }
 
-int run_generate(std::uint64_t events, std::uint64_t seed, const std::string& out) {
+bool apply_workload(const std::string& name, ob::GeneratorOptions& options) {
+    if (name == "mixed") {
+        options.limit_percent = 65;
+        options.cancel_percent = 20;
+    } else if (name == "limits") {
+        options.limit_percent = 100;
+        options.cancel_percent = 0;
+    } else if (name == "cancels") {
+        options.limit_percent = 50;
+        options.cancel_percent = 50;
+    } else if (name == "markets") {
+        options.limit_percent = 50;
+        options.cancel_percent = 0;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+int run_generate(std::uint64_t events, std::uint64_t seed, const std::string& workload,
+                 const std::string& out) {
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;
+    if (!apply_workload(workload, options)) {
+        std::cerr << "--workload must be mixed, limits, cancels or markets\n";
+        return 1;
+    }
 
     const auto trace = ob::generate(options);
     if (!ob::write_csv(out, trace)) {
@@ -351,7 +375,7 @@ void print_stats(const char* name, std::vector<double> values, std::uint64_t tra
 }
 
 int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
-              const std::string& impl) {
+              const std::string& workload, const std::string& impl) {
     if (runs < 1) {
         std::cerr << "--runs must be at least 1\n";
         return 1;
@@ -364,6 +388,10 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;
+    if (!apply_workload(workload, options)) {
+        std::cerr << "--workload must be mixed, limits, cancels or markets\n";
+        return 1;
+    }
 
     const auto trace = ob::generate(options);
     const ImplSelection selection = select_impl(impl);
@@ -398,8 +426,8 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
     lo -= 100;
     hi += 100;
 
-    std::cout << "workload  " << trace.size() << " events, seed " << seed
-              << ", ladder [" << lo << ", " << hi << "]\n";
+    std::cout << "workload  " << trace.size() << " events, seed " << seed << ", "
+              << workload << ", ladder [" << lo << ", " << hi << "]\n";
 
     if (repeat == 1) {
         const BenchSet set =
@@ -472,7 +500,7 @@ int run_bench(std::uint64_t events, std::uint64_t seed, int runs, int repeat,
 
 template <class BookT, class Factory>
 std::size_t write_depth(const std::vector<ob::TraceEvent>& trace, std::size_t frames,
-                        std::ostream& out, Factory factory) {
+                        std::size_t levels, std::ostream& out, Factory factory) {
     BookT book = factory();
     out << "frame,side,rank,price,quantity\n";
 
@@ -484,8 +512,8 @@ std::size_t write_depth(const std::vector<ob::TraceEvent>& trace, std::size_t fr
         apply(book, trace[i]);
 
         if ((i + 1) % step == 0 || i + 1 == total) {
-            const auto bids = book.depth(ob::Side::Buy, 15);
-            const auto asks = book.depth(ob::Side::Sell, 15);
+            const auto bids = book.depth(ob::Side::Buy, levels);
+            const auto asks = book.depth(ob::Side::Sell, levels);
 
             for (std::size_t rank = 0; rank < bids.size(); ++rank) {
                 out << frame << ",B," << rank << ',' << bids[rank].first << ','
@@ -503,15 +531,24 @@ std::size_t write_depth(const std::vector<ob::TraceEvent>& trace, std::size_t fr
 }
 
 int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
+              std::size_t levels, const std::string& workload,
               const std::string& impl, const std::string& out) {
     if (frames == 0) {
         std::cerr << "--frames must be at least 1\n";
+        return 1;
+    }
+    if (levels == 0) {
+        std::cerr << "--levels must be at least 1\n";
         return 1;
     }
 
     ob::GeneratorOptions options{};
     options.events = events;
     options.seed = seed;
+    if (!apply_workload(workload, options)) {
+        std::cerr << "--workload must be mixed, limits, cancels or markets\n";
+        return 1;
+    }
 
     const auto trace = ob::generate(options);
     const ImplSelection selection = select_impl(impl);
@@ -565,8 +602,8 @@ int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
     };
 
     if (selection.map) {
-        const std::size_t count =
-            write_depth<ob::Book>(trace, frames, map_out, [] { return ob::Book(); });
+        const std::size_t count = write_depth<ob::Book>(trace, frames, levels, map_out,
+                                                        [] { return ob::Book(); });
         if (!check(map_out, count)) {
             std::cerr << "depth implementations disagree\n";
             return 1;
@@ -574,7 +611,8 @@ int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
     }
     if (selection.array) {
         const std::size_t count = write_depth<ob::ArrayBook>(
-            trace, frames, array_out, [lo, hi] { return ob::ArrayBook(lo, hi); });
+            trace, frames, levels, array_out,
+            [lo, hi] { return ob::ArrayBook(lo, hi); });
         if (!check(array_out, count)) {
             std::cerr << "depth implementations disagree\n";
             return 1;
@@ -582,7 +620,7 @@ int run_depth(std::uint64_t events, std::uint64_t seed, std::size_t frames,
     }
     if (selection.pool) {
         const std::size_t count = write_depth<ob::PoolBook>(
-            trace, frames, pool_out,
+            trace, frames, levels, pool_out,
             [lo, hi, limit_events] { return ob::PoolBook(lo, hi, limit_events); });
         if (!check(pool_out, count)) {
             std::cerr << "depth implementations disagree\n";
@@ -642,10 +680,13 @@ int main(int argc, char** argv) {
     int runs = 3;
     int repeat = 1;
     std::size_t frames = 60;
+    std::size_t levels = 15;
     std::string out;
     std::string input;
     std::string impl = "all";
     bool impl_set = false;
+    std::string workload = "mixed";
+    bool workload_set = false;
 
     try {
         for (std::size_t i = 1; i < args.size(); ++i) {
@@ -667,6 +708,11 @@ int main(int argc, char** argv) {
                 repeat = std::stoi(value("--repeat"));
             } else if (arg == "--frames") {
                 frames = std::stoull(value("--frames"));
+            } else if (arg == "--levels") {
+                levels = std::stoull(value("--levels"));
+            } else if (arg == "--workload") {
+                workload = value("--workload");
+                workload_set = true;
             } else if (arg == "--out") {
                 out = value("--out");
             } else if (arg == "--impl") {
@@ -691,24 +737,29 @@ int main(int argc, char** argv) {
                 std::cerr << "--out is required\n";
                 return 1;
             }
-            return run_generate(events, seed, out);
+            return run_generate(events, seed, workload, out);
         }
         if (command == "replay") {
             if (input.empty()) {
                 std::cerr << "a trace file is required\n";
                 return 1;
             }
+            if (workload_set) {
+                std::cerr << "--workload is not used by replay\n";
+                return 1;
+            }
             return run_replay(input, impl_set ? impl : "map");
         }
         if (command == "bench") {
-            return run_bench(events, seed, runs, repeat, impl);
+            return run_bench(events, seed, runs, repeat, workload, impl);
         }
         if (command == "depth") {
             if (out.empty()) {
                 std::cerr << "--out is required\n";
                 return 1;
             }
-            return run_depth(events, seed, frames, impl_set ? impl : "map", out);
+            return run_depth(events, seed, frames, levels, workload,
+                             impl_set ? impl : "map", out);
         }
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << '\n';
