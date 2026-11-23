@@ -287,6 +287,8 @@ set(CPACK_GENERATOR "ZIP;TGZ")
 set(CPACK_SOURCE_GENERATOR "ZIP;TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
     "/build[^/]*/"
+    "/install/"
+    "/consumer-build/"
     "/[.]git/"
     "/[.]github/"
     "/venv/"
