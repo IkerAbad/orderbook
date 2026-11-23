@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0 - 2026-11-23
+
+First public release. The engine and tooling changes are listed under 0.2.0.
+This release adds the publication and continuous fuzzing pipeline.
+
+### Added
+
+- GitHub release workflow that builds and tests the tag on Linux and Windows
+  and attaches the CPack ZIP packages and the source TGZ.
+- Weekly long libFuzzer job, 600 seconds per target, in addition to the
+  60-second run on every push.
+- Corpus artifacts published from the fuzzing jobs.
+
+### Tests and CI
+
+- 57 doctest cases, 25 CLI checks and 27 CTest entries.
+- The release workflow runs the full test suite and the installed binary on
+  both platforms before publishing.
+- The benchmark section records hardware, date and the exact command.
+
 ## 0.2.0 - 2026-11-22
 
 ### Added

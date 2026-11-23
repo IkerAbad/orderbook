@@ -9,4 +9,4 @@ CMakeUserPresets.json
 .vscode/
 venv/
 __pycache__/
-data/*.csv
+data/

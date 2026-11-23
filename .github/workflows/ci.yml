@@ -3,6 +3,8 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 3 * * 0'
 
 jobs:
   build:
@@ -125,7 +127,9 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   fuzz:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v7
@@ -149,6 +153,62 @@ jobs:
 
       - name: Fuzz the books
         run: ./build/fuzz_book -max_total_time=60 -timeout=10 -print_final_stats=1 fuzz/corpus_book
+
+      - name: Upload parser corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-parse
+          path: fuzz/corpus_parse
+
+      - name: Upload book corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-book
+          path: fuzz/corpus_book
+
+  fuzz-long:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          -DORDERBOOK_BUILD_FUZZERS=ON
+          -DBUILD_TESTING=OFF
+          -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Fuzz the parser
+        run: ./build/fuzz_parse_csv -max_total_time=600 -timeout=10 -print_final_stats=1 fuzz/corpus_parse
+
+      - name: Fuzz the books
+        run: ./build/fuzz_book -max_total_time=600 -timeout=10 -print_final_stats=1 fuzz/corpus_book
+
+      - name: Upload parser corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-parse-long
+          path: fuzz/corpus_parse
+
+      - name: Upload book corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-book-long
+          path: fuzz/corpus_book
 
   coverage:
     runs-on: ubuntu-latest

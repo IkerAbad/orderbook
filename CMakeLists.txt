@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(orderbook VERSION 0.2.0
+project(orderbook VERSION 1.0.0
   DESCRIPTION "Limit order book and matching engine in C++23"
   HOMEPAGE_URL "https://github.com/IkerAbad/orderbook"
   LANGUAGES CXX)

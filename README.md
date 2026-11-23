@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/IkerAbad/orderbook/actions/workflows/ci.yml/badge.svg)](https://github.com/IkerAbad/orderbook/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-333?style=flat-square)](LICENSE)
-![version](https://img.shields.io/badge/version-0.2.0-333?style=flat-square)
+![version](https://img.shields.io/badge/version-1.0.0-333?style=flat-square)
 
 Limit order book and matching engine in C++23. Price-time priority, integer
 prices, three implementations of the same contract, no external dependencies,
@@ -66,7 +66,7 @@ pool   min 46.8  median 51.2  max 61.1 ns/event   457777 trades
 pool memory  36.8 MiB, 650012 slots
 ```
 
-Measured on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
+Measured on 2026-11-23 on a Ryzen 9 5900X, Windows 11, GCC 14.2 in `Release` mode (`-O3`),
 single thread. Each repeat is the best of three runs and the table summarises
 ten repeats. Using the medians, `PoolBook` is 3.1 times faster than `Book` and
 2.6 times faster than `ArrayBook`. The min and max columns show the spread of
@@ -316,7 +316,7 @@ cmake --install build --prefix /some/prefix
 The install exports `orderbook::orderbook_core` for `find_package`:
 
 ```cmake
-find_package(orderbook 0.2 CONFIG REQUIRED)
+find_package(orderbook 1.0 CONFIG REQUIRED)
 target_link_libraries(app PRIVATE orderbook::orderbook_core)
 ```
 
@@ -462,8 +462,8 @@ Clang:
 
 - `fuzz_parse_csv` feeds arbitrary bytes to `parse_csv`, which must reject
   malformed input with an exception instead of reading out of bounds.
-- `fuzz_book` interprets bytes as limit, market, cancel and modify operations
-  and aborts if `Book`, `ArrayBook` and `PoolBook` disagree on state or trades.
+- `fuzz_book` feeds the same bytes to `Book`, `ArrayBook` and `PoolBook` and
+  aborts if they disagree on state or trades.
 
 ```
 cmake --preset fuzz
@@ -473,7 +473,10 @@ cmake --build --preset fuzz
 ```
 
 The CI job runs both for 60 seconds with AddressSanitizer and
-UndefinedBehaviorSanitizer.
+UndefinedBehaviorSanitizer on every push and pull request. A weekly job runs
+each target for 600 seconds. The corpus lives in `fuzz/corpus_parse` and
+`fuzz/corpus_book`, and CI uploads it after every run as `corpus-parse`,
+`corpus-book`, `corpus-parse-long` and `corpus-book-long`.
 
 ## Español
 
